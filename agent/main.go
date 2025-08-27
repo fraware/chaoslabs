@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/prometheus/client_golang/tree/main/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/jaeger"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"

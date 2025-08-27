@@ -1,0 +1,92 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Go build artifacts
+*.test
+*.prof
+*.out
+*_test.go.out
+
+# Dependencies
+/vendor/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Coverage reports
+coverage/
+*.cover
+*.coverage
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Reports and artifacts
+reports/
+*.report
+profiles/
+
+# Cache directories
+.cache/
+.npm/
+.yarn/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+build/
+out/
+
+# Docker volumes
+.docker/
+
+# Kubernetes secrets
+secrets/
+
+# Terraform state
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Go module download cache
+go.sum.backup
+
+# Performance profiles
+*.pprof
+*.trace
+
+# Test artifacts
+*.test.log
+test-results/

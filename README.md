@@ -7,16 +7,21 @@ ChaosLabs is an open-source toolkit designed for chaos engineering experiments i
 - **Dashboard:** Provides a user-friendly interface to monitor and manage experiments in real-time.
 
 ## Table of Contents
-1. [Architecture](#architecture)
-2. [Features](#features)
-3. [Setup & Installation](#setup--installation)
-4. [Usage](#usage)
-5. [Observability & Monitoring](#observability--monitoring)
-6. [Troubleshooting](#troubleshooting)
-7. [FAQ](#faq)
-8. [User Guides & Tutorials](#user-guides--tutorials)
-9. [Contributing](#contributing)
-10. [License](#license)
+- [ChaosLabs: A Chaos Engineering Toolkit](#chaoslabs-a-chaos-engineering-toolkit)
+  - [Table of Contents](#table-of-contents)
+  - [Architecture](#architecture)
+  - [Features](#features)
+  - [Setup \& Installation](#setup--installation)
+    - [Prerequisites](#prerequisites)
+    - [Local Setup](#local-setup)
+    - [Scheduling \& Parallel Experiments](#scheduling--parallel-experiments)
+  - [Observability \& Monitoring](#observability--monitoring)
+  - [Troubleshooting](#troubleshooting)
+    - [Common Issues](#common-issues)
+  - [FAQ](#faq)
+  - [User Guides \& Tutorials](#user-guides--tutorials)
+  - [Contributing](#contributing)
+  - [License](#license)
 
 ## Architecture
 
@@ -85,10 +90,11 @@ For detailed design diagrams and further documentation, please visit our [Wiki](
 
 - Dashboard: 
    ```bash
-   cd dashboard
-   python app.py
+   cd dashboard-v2
+   npm install
+   npm run dev
 
-3. **Access the Dashboard:** Open your browser at http://localhost:5500.
+3. **Access the Dashboard:** Open your browser at http://localhost:3000.
 
 ## 3 Local Setup
 Please refer to the Kubernetes Documentation for detailed instructions on deploying ChaosLabs using the provided manifests.

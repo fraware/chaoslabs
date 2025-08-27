@@ -1,0 +1,62 @@
+# Multi-stage Docker build for optimized ChaosLab Agent
+# This Dockerfile implements best practices for build speed, security, and size optimization
+
+# Build cache stage - reused across builds for faster iterations
+FROM golang:1.24-alpine AS build-cache
+WORKDIR /build-cache
+# Install build dependencies and cache them
+RUN apk add --no-cache git ca-certificates tzdata make
+# Pre-download common Go modules to cache layer
+COPY agent/go.mod agent/go.sum ./
+RUN go mod download
+
+# Development build stage - optimized for fast rebuilds
+FROM build-cache AS development
+WORKDIR /app
+# Copy source code
+COPY agent/ .
+# Build with debug info and race detection disabled for faster builds
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-w -s" \
+    -o agent-dev .
+
+# Production build stage - optimized binary
+FROM build-cache AS production
+WORKDIR /app
+# Copy source code
+COPY agent/ .
+# Build optimized binary
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-w -s -X main.Version=1.0.0 -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    -trimpath \
+    -o agent .
+
+# Final stage - minimal runtime image
+FROM alpine:3.18 AS runtime
+RUN apk --no-cache add ca-certificates tzdata
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup -g 1000 chaoslabs && \
+    adduser -u 1000 -G chaoslabs -s /bin/sh -D chaoslabs
+
+# Copy binary from production stage
+COPY --from=production --chown=1000:1000 /app/agent .
+RUN chmod +x ./agent
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD ./agent --health-check || exit 1
+
+# Switch to non-root user
+USER 1000:1000
+EXPOSE 8081 2346
+ENTRYPOINT ["./agent"]
+
+# Debug variant - includes delve debugger
+FROM golang:1.24-alpine AS debug
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+WORKDIR /app
+COPY --from=development /app .
+EXPOSE 8081 2346
+CMD ["dlv", "--listen=:2346", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "./agent-dev"]

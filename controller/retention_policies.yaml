@@ -1,0 +1,283 @@
+# ChaosLabs Data Retention Policies
+# This file defines retention policies for different data types and user roles
+
+# Global retention settings
+global:
+  # Default TTL for all collections (can be overridden per collection)
+  default_ttl: "7d"
+  
+  # Compression settings
+  compression:
+    algorithm: "zstd"  # zstd, gzip, lz4
+    level: 3          # 1-9 for zstd, 1-9 for gzip
+  
+  # Backup settings
+  backup:
+    frequency: "1h"   # How often to create backups
+    retention: "30d"  # How long to keep backups
+
+# Collection-specific retention policies
+collections:
+  logs:
+    description: "Application and system logs"
+    hot_retention: "24h"      # MongoDB time-series
+    warm_retention: "7d"       # Object storage (compressed)
+    cold_retention: "90d"      # Immutable sink
+    ttl_index: "7d"           # MongoDB TTL expiration
+    
+    # Role-based access and retention
+    roles:
+      admin:
+        retention: "365d"      # Admins can access logs for 1 year
+        compression: "zstd:1"  # High compression for long-term storage
+        
+      operator:
+        retention: "30d"       # Operators can access logs for 30 days
+        compression: "zstd:3"  # Balanced compression
+        
+      viewer:
+        retention: "7d"        # Viewers can access logs for 7 days
+        compression: "zstd:5"  # Lower compression for faster access
+    
+    # Indexes for performance
+    indexes:
+      - name: "idx_timestamp_agent"
+        fields: ["timestamp", "agentId"]
+        type: "compound"
+        
+      - name: "idx_level_timestamp"
+        fields: ["level", "timestamp"]
+        type: "compound"
+        
+      - name: "idx_experiment_timestamp"
+        fields: ["experimentId", "timestamp"]
+        type: "compound"
+        
+      - name: "idx_ttl_expire"
+        fields: ["expireAt"]
+        type: "ttl"
+        options:
+          expire_after_seconds: 604800  # 7 days
+
+  experiments:
+    description: "Chaos engineering experiment records"
+    hot_retention: "7d"        # MongoDB time-series
+    warm_retention: "30d"       # Object storage
+    cold_retention: "365d"      # Immutable sink
+    ttl_index: "30d"           # MongoDB TTL expiration
+    
+    roles:
+      admin:
+        retention: "365d"
+        compression: "zstd:1"
+        
+      operator:
+        retention: "90d"
+        compression: "zstd:3"
+        
+      viewer:
+        retention: "30d"
+        compression: "zstd:5"
+    
+    indexes:
+      - name: "idx_timestamp_target"
+        fields: ["timestamp", "target"]
+        type: "compound"
+        
+      - name: "idx_type_timestamp"
+        fields: ["experimentType", "timestamp"]
+        type: "compound"
+        
+      - name: "idx_status_timestamp"
+        fields: ["status", "timestamp"]
+        type: "compound"
+        
+      - name: "idx_ttl_expire"
+        fields: ["expireAt"]
+        type: "ttl"
+        options:
+          expire_after_seconds: 2592000  # 30 days
+
+  metrics:
+    description: "System and application metrics"
+    hot_retention: "1h"        # MongoDB time-series (real-time)
+    warm_retention: "7d"        # Object storage (hourly aggregates)
+    cold_retention: "90d"       # Immutable sink (daily aggregates)
+    ttl_index: "7d"            # MongoDB TTL expiration
+    
+    # Metrics are typically accessed by all roles
+    roles:
+      admin:
+        retention: "90d"
+        compression: "zstd:1"
+        
+      operator:
+        retention: "30d"
+        compression: "zstd:3"
+        
+      viewer:
+        retention: "7d"
+        compression: "zstd:5"
+    
+    indexes:
+      - name: "idx_timestamp_metric"
+        fields: ["timestamp", "metricName"]
+        type: "compound"
+        
+      - name: "idx_agent_timestamp"
+        fields: ["agentId", "timestamp"]
+        type: "compound"
+        
+      - name: "idx_ttl_expire"
+        fields: ["expireAt"]
+        type: "ttl"
+        options:
+          expire_after_seconds: 604800  # 7 days
+
+  events:
+    description: "System events and notifications"
+    hot_retention: "24h"       # MongoDB time-series
+    warm_retention: "7d"        # Object storage
+    cold_retention: "30d"       # Immutable sink
+    ttl_index: "7d"            # MongoDB TTL expiration
+    
+    roles:
+      admin:
+        retention: "90d"
+        compression: "zstd:1"
+        
+      operator:
+        retention: "30d"
+        compression: "zstd:3"
+        
+      viewer:
+        retention: "7d"
+        compression: "zstd:5"
+    
+    indexes:
+      - name: "idx_timestamp_type"
+        fields: ["timestamp", "eventType"]
+        type: "compound"
+        
+      - name: "idx_severity_timestamp"
+        fields: ["severity", "timestamp"]
+        type: "compound"
+        
+      - name: "idx_ttl_expire"
+        fields: ["expireAt"]
+        type: "ttl"
+        options:
+          expire_after_seconds: 604800  # 7 days
+
+# Storage tier configuration
+storage_tiers:
+  hot:
+    description: "MongoDB time-series collections"
+    type: "mongodb"
+    compression: "none"  # No compression for fast access
+    replication: 3       # Number of replicas
+    
+  warm:
+    description: "Object storage (S3, GCS, etc.)"
+    type: "object_storage"
+    compression: "zstd:3"
+    replication: 2
+    lifecycle:
+      transition_days: 7
+      storage_class: "STANDARD_IA"  # Infrequent access
+    
+  cold:
+    description: "Immutable sink (immudb, etc.)"
+    type: "immutable_sink"
+    compression: "zstd:1"
+    replication: 1
+    verification:
+      merkle_proofs: true
+      cryptographic_verification: true
+
+# Data lifecycle rules
+lifecycle:
+  # Automatic data movement between tiers
+  auto_transition: true
+  
+  # Transition schedules
+  schedules:
+    hot_to_warm:
+      frequency: "1h"
+      batch_size: 10000
+      
+    warm_to_cold:
+      frequency: "1d"
+      batch_size: 100000
+      
+    cold_cleanup:
+      frequency: "7d"
+      batch_size: 1000000
+  
+  # Data aggregation rules
+  aggregation:
+    metrics:
+      hourly:
+        interval: "1h"
+        fields: ["avg", "min", "max", "count"]
+        
+      daily:
+        interval: "1d"
+        fields: ["avg", "min", "max", "count", "p95", "p99"]
+        
+    logs:
+      hourly:
+        interval: "1h"
+        fields: ["count", "error_count", "unique_agents"]
+        
+      daily:
+        interval: "1d"
+        fields: ["count", "error_count", "unique_agents", "top_errors"]
+
+# Monitoring and alerting
+monitoring:
+  # Storage usage alerts
+  storage_alerts:
+    hot_tier_usage: 80    # Alert when hot tier is 80% full
+    warm_tier_usage: 85   # Alert when warm tier is 85% full
+    cold_tier_usage: 90   # Alert when cold tier is 90% full
+  
+  # Performance alerts
+  performance_alerts:
+    query_time_p95: "100ms"    # Alert when P95 query time exceeds 100ms
+    migration_duration: "1h"   # Alert when migration takes longer than 1 hour
+  
+  # Data quality alerts
+  data_quality_alerts:
+    missing_timestamps: true   # Alert on documents without timestamps
+    invalid_agent_ids: true    # Alert on documents with invalid agent IDs
+    duplicate_records: true    # Alert on duplicate records
+
+# Compliance and audit
+compliance:
+  # Data retention compliance
+  retention_compliance:
+    gdpr: true
+    sox: true
+    hipaa: false  # Set to true if handling healthcare data
+  
+  # Audit logging
+  audit_logging:
+    enabled: true
+    retention: "7y"  # Keep audit logs for 7 years
+    events:
+      - "data_access"
+      - "data_modification"
+      - "retention_policy_changes"
+      - "data_deletion"
+  
+  # Data export and deletion
+  data_export:
+    formats: ["json", "csv", "parquet"]
+    encryption: true
+    verification: true
+    
+  data_deletion:
+    soft_delete: true      # Mark as deleted instead of hard delete
+    hard_delete_after: "30d"  # Hard delete after 30 days
+    verification_required: true

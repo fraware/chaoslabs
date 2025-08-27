@@ -1,8 +1,0 @@
-FROM golang:1.18-alpine
-WORKDIR /app
-COPY controller/go.mod .
-RUN go mod download
-COPY agent/ .
-RUN go build -o chaos-agent .
-EXPOSE 9090
-CMD ["./chaos-agent"]

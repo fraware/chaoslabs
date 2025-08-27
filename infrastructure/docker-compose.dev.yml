@@ -1,0 +1,263 @@
+# Development-optimized Docker Compose with hot reload and caching
+version: "3.8"
+
+# Define reusable configurations
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-common-env: &common-env
+  JAEGER_ENDPOINT: http://jaeger:14268/api/traces
+  REDIS_URL: redis://redis:6379
+  NATS_URL: nats://nats:4222
+  LOG_LEVEL: debug
+  ENVIRONMENT: development
+
+services:
+  # Controller service with hot reload
+  controller:
+    build:
+      context: .
+      dockerfile: infrastructure/Dockerfile.controller.optimized
+      target: development-runtime
+      cache_from:
+        - chaoslabs/controller:build-cache
+        - chaoslabs/controller:development
+    image: chaoslabs/controller:dev
+    ports:
+      - "8080:8080"
+      - "2345:2345" # Delve debugger port
+    environment:
+      <<: *common-env
+      NODE_ID: controller-1
+      AGENT_ENDPOINTS: http://agent:9090/inject
+    volumes:
+      # Hot reload for Go files
+      - ./controller:/app/controller:cached
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    depends_on:
+      - redis
+      - nats
+      - jaeger
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Agent service with hot reload
+  agent:
+    build:
+      context: .
+      dockerfile: infrastructure/Dockerfile.agent.optimized
+      target: development-runtime
+    image: chaoslabs/agent:dev
+    ports:
+      - "9090:9090"
+      - "2346:2345" # Delve debugger port
+    environment:
+      <<: *common-env
+      NODE_ID: agent-1
+    volumes:
+      - ./agent:/app/agent:cached
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    privileged: true # Required for network chaos experiments
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    depends_on:
+      - jaeger
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Enhanced dashboard with Node.js caching
+  dashboard:
+    build:
+      context: ./dashboard-v2
+      dockerfile: Dockerfile.dev
+    image: chaoslabs/dashboard:dev
+    ports:
+      - "3000:3000"
+      - "3001:3001" # WebSocket dev server
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8080
+      - VITE_WS_URL=ws://localhost:8080/ws
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./dashboard-v2:/app:cached
+      - node-modules-cache:/app/node_modules
+      - vite-cache:/app/.vite
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Redis with persistence and optimized config
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+      - ./infrastructure/redis/redis-dev.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # NATS for event streaming
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222" # HTTP monitoring
+    command:
+      - "--jetstream"
+      - "--store_dir=/data"
+      - "--http_port=8222"
+      - "--max_payload=1MB"
+      - "--max_pending=10MB"
+    volumes:
+      - nats-data:/data
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "14268:14268" # Jaeger collector
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - MEMORY_MAX_TRACES=10000
+    volumes:
+      - jaeger-data:/tmp
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus-dev.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Grafana for metrics visualization
+  grafana:
+    image: grafana/grafana:10.1.0
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=chaoslabs
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    logging: *default-logging
+
+  # MongoDB for time-series data (optional)
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=chaoslabs
+      - MONGO_INITDB_ROOT_PASSWORD=chaoslabs
+      - MONGO_INITDB_DATABASE=chaoslabs
+    volumes:
+      - mongodb-data:/data/db
+      - ./infrastructure/mongodb/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Development tools container
+  devtools:
+    build:
+      context: ./infrastructure/devtools
+      dockerfile: Dockerfile
+    image: chaoslabs/devtools:latest
+    volumes:
+      - .:/workspace:cached
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      - node-modules-cache:/workspace/dashboard-v2/node_modules
+    working_dir: /workspace
+    tty: true
+    stdin_open: true
+    profiles:
+      - tools
+
+  # Load testing with k6
+  k6:
+    image: grafana/k6:0.46.0
+    volumes:
+      - ./tests/load:/scripts:ro
+      - k6-data:/app
+    profiles:
+      - testing
+    logging: *default-logging
+
+volumes:
+  # Go caching for faster builds
+  go-mod-cache:
+    driver: local
+  go-build-cache:
+    driver: local
+
+  # Node.js caching
+  node-modules-cache:
+    driver: local
+  vite-cache:
+    driver: local
+
+  # Application data
+  redis-data:
+    driver: local
+  nats-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  mongodb-data:
+    driver: local
+  jaeger-data:
+    driver: local
+  k6-data:
+    driver: local
+
+networks:
+  default:
+    name: chaoslabs-dev
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
