@@ -20,13 +20,45 @@ func main() {
 	// Ensure tracer provider shuts down when the application exits.
 	defer func() { _ = tp.Shutdown(context.Background()) }()
 
-	// Register application endpoints.
-	registerHandlers()
+	// Initialize health checker
+	healthChecker := NewHealthChecker("1.0.0")
+	
+	// Initialize middleware
+	validationMiddleware := NewValidationMiddleware()
+	rateLimitMiddleware := NewRateLimitMiddleware(nil) // Use default config
+	
+	// Create a new ServeMux for better control over routing
+	mux := http.NewServeMux()
+	
+	// Register application endpoints with middleware chain
+	registerHandlers(mux, healthChecker)
 
-	// Expose Prometheus metrics endpoint.
+	// Apply middleware chain
+	handler := CORSMiddleware(
+		SecurityHeadersMiddleware(
+			rateLimitMiddleware.Middleware(
+				validationMiddleware.Middleware(
+					ConditionalGetMiddleware(mux),
+				),
+			),
+		),
+	)
+
+	// Expose Prometheus metrics endpoint directly (bypass rate limiting)
 	http.Handle("/metrics", promhttp.Handler())
+	
+	// Apply middleware to all other routes
+	http.Handle("/", handler)
 
 	log.Println("ChaosLab Controller running on :8080")
+	log.Println("Endpoints:")
+	log.Println("  POST /start - Start chaos experiment")
+	log.Println("  POST /stop - Stop chaos experiment")
+	log.Println("  GET /experiments - List experiments")
+	log.Println("  GET /healthz - Health check")
+	log.Println("  GET /readyz - Readiness check")
+	log.Println("  GET /metrics - Prometheus metrics")
+	
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatalf("Controller failed to start: %v", err)
 	}
