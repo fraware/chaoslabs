@@ -38,20 +38,20 @@ func init() {
 
 // ExperimentRequest represents the payload for starting an experiment.
 type ExperimentRequest struct {
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	ExperimentType string `json:"experiment_type"`
-	Target         string `json:"target"`
-	Duration       int    `json:"duration"`     // seconds
-	DelayMs        int    `json:"delay_ms"`     // network latency
-	LossPercent    int    `json:"loss_percent"` // packet loss
-	CPUWorkers     int    `json:"cpu_workers"`
-	MemSizeMB      int    `json:"mem_size_mb"`
-	KillProcess    string `json:"kill_process"`
+	Name           string    `json:"name" validate:"required,min=1,max=100"`
+	Description    string    `json:"description" validate:"max=500"`
+	ExperimentType string    `json:"experiment_type" validate:"required,experiment_type"`
+	Target         string    `json:"target" validate:"required,min=1,max=100"`
+	Duration       int       `json:"duration" validate:"required,positive_duration,min=1,max=3600"`     // seconds
+	DelayMs        int       `json:"delay_ms" validate:"min=0,max=10000"`     // network latency
+	LossPercent    int       `json:"loss_percent" validate:"min=0,max=100"` // packet loss
+	CPUWorkers     int       `json:"cpu_workers" validate:"min=0,max=32"`
+	MemSizeMB      int       `json:"mem_size_mb" validate:"min=0,max=16384"`
+	KillProcess    string    `json:"kill_process" validate:"max=100"`
 	// Scheduling
 	StartTime  time.Time `json:"start_time"`  // optional, for scheduling
 	Parallel   bool      `json:"parallel"`    // run multiple agents in parallel?
-	AgentCount int       `json:"agent_count"` // how many agents to target in parallel?
+	AgentCount int       `json:"agent_count" validate:"min=1,max=100"` // how many agents to target in parallel?
 }
 
 // We’ll store experiments in memory for demonstration purposes.
@@ -59,10 +59,13 @@ var experimentList = make([]ExperimentRequest, 0)
 var listMutex sync.Mutex
 
 // registerHandlers sets up the HTTP endpoints.
-func registerHandlers() {
-	http.HandleFunc("/start", startExperimentHandler)
-	http.HandleFunc("/stop", stopExperimentHandler)
-	http.HandleFunc("/experiments", experimentsHandler)
+func registerHandlers(mux *http.ServeMux, healthChecker *HealthChecker) {
+	mux.HandleFunc("/start", startExperimentHandler)
+	mux.HandleFunc("/stop", stopExperimentHandler)
+	mux.HandleFunc("/experiments", experimentsHandler)
+	mux.HandleFunc("/healthz", healthChecker.HealthzHandler)
+	mux.HandleFunc("/readyz", healthChecker.ReadyzHandler)
+	mux.HandleFunc("/metrics-info", healthChecker.MetricsHandler)
 }
 
 // startExperimentHandler handles the start experiment request.
@@ -77,10 +80,27 @@ func startExperimentHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unable to read request", http.StatusBadRequest)
 		return
 	}
+	
 	var expReq ExperimentRequest
 	if err := json.Unmarshal(body, &expReq); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "invalid_json",
+			"message": "Request body must be valid JSON",
+			"details": err.Error(),
+		})
 		return
+	}
+
+	// Validate request using middleware validator
+	if validator, ok := r.Context().Value("validator").(*ValidationMiddleware); ok {
+		if validationErr := validator.Validate(expReq); validationErr != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(validationErr)
+			return
+		}
 	}
 
 	log.Printf("[Controller] Received experiment request: %+v", expReq)

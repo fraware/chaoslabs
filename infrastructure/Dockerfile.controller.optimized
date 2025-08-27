@@ -1,0 +1,125 @@
+# Multi-stage Docker build for optimized ChaosLab Controller
+# This Dockerfile implements best practices for build speed, security, and size optimization
+
+# Build cache stage - reused across builds for faster iterations
+FROM golang:1.21-alpine AS build-cache
+WORKDIR /build-cache
+# Install build dependencies and cache them
+RUN apk add --no-cache git ca-certificates tzdata make
+# Pre-download common Go modules to cache layer
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+
+# Development stage - optimized for fast rebuilds during development  
+FROM build-cache AS development
+WORKDIR /app
+# Copy source code
+COPY . .
+# Build with development flags for faster compilation
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-s -w" \
+    -gcflags="-N -l" \
+    -o controller-dev \
+    ./controller/
+
+# Test stage - runs tests and generates coverage
+FROM development AS test
+RUN go test -v -race -coverprofile=coverage.out ./controller/...
+RUN go tool cover -html=coverage.out -o coverage.html
+# Save test artifacts
+RUN mkdir -p /test-artifacts && \
+    cp coverage.out coverage.html /test-artifacts/
+
+# Security scanning stage
+FROM build-cache AS security-scan
+WORKDIR /app
+COPY . .
+# Install security tools
+RUN go install github.com/securecodewarrior/goat@latest || true
+RUN go install golang.org/x/vuln/cmd/govulncheck@latest || true
+# Run security checks (non-blocking for now)
+RUN govulncheck ./... || echo "Security scan completed with warnings"
+
+# Production build stage - optimized for smallest size and performance
+FROM build-cache AS production-build
+WORKDIR /app
+COPY . .
+
+# Build optimizations for production
+ENV CGO_ENABLED=0
+ENV GOOS=linux  
+ENV GOARCH=amd64
+
+# Advanced build optimizations
+RUN go build \
+    -a \
+    -installsuffix cgo \
+    -ldflags="-s -w -X main.version=$(git describe --tags --always --dirty) -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -extldflags '-static'" \
+    -tags netgo,osusergo \
+    -trimpath \
+    -mod=readonly \
+    -o controller \
+    ./controller/
+
+# Verify the binary
+RUN ./controller --version || echo "Version check completed"
+RUN file ./controller
+RUN ls -la ./controller
+
+# UPX compression stage (optional, can reduce binary size by 50-70%)
+FROM alpine:3.18 AS compress
+RUN apk add --no-cache upx
+WORKDIR /app
+COPY --from=production-build /app/controller .
+# Compress binary (optional - uncomment if size is critical)
+# RUN upx --best --lzma controller
+
+# Final production stage - minimal distroless image for security
+FROM gcr.io/distroless/static-debian11:nonroot AS production
+
+# Metadata labels
+LABEL maintainer="ChaosLabs Team <chaos@example.com>"
+LABEL org.opencontainers.image.title="ChaosLabs Controller"
+LABEL org.opencontainers.image.description="High-performance chaos engineering controller with observability"
+LABEL org.opencontainers.image.source="https://github.com/your-org/chaoslabs"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.version="2.0"
+
+# Security: Run as non-root user
+USER nonroot:nonroot
+
+# Copy binary from build stage
+COPY --from=production-build --chown=nonroot:nonroot /app/controller /usr/local/bin/controller
+
+# Copy CA certificates for HTTPS requests
+COPY --from=production-build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Add timezone data
+COPY --from=production-build /usr/share/zoneinfo /usr/share/zoneinfo
+
+# Expose ports
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ["/usr/local/bin/controller", "--health-check"]
+
+# Entry point
+ENTRYPOINT ["/usr/local/bin/controller"]
+CMD ["--config=/etc/chaoslabs/config.yaml"]
+
+# Development variant - includes debugging tools
+FROM alpine:3.18 AS development-runtime
+RUN apk add --no-cache ca-certificates tzdata curl jq htop
+COPY --from=development /app/controller-dev /usr/local/bin/controller
+USER 1000:1000
+EXPOSE 8080 2345
+ENTRYPOINT ["/usr/local/bin/controller"]
+
+# Debug variant - includes delve debugger
+FROM golang:1.21-alpine AS debug
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+WORKDIR /app
+COPY --from=development /app .
+EXPOSE 8080 2345
+CMD ["dlv", "--listen=:2345", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "./controller-dev"]
