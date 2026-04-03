@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/logo.png" alt="ChaosLabs logo" width="240" />
+  <img src="docs/assets/logo.png" alt="ChaosLabs logo" width="400" />
 </p>
 ---
 
