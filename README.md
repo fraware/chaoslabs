@@ -6,12 +6,11 @@
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node-20+-339933?logo=nodedotjs&logoColor=white" alt="Node 20+" /></a>
 </p>
 
+**ChaosLabs** is an open-source chaos engineering toolkit for distributed systems. Run controlled fault injection—network impairment, CPU and memory stress, process kills—and coordinate experiments across agents from a single controller, with a live dashboard and first-class observability hooks.
+
 <p align="center">
   <img src="docs/assets/logo.png" alt="ChaosLabs logo" width="400" />
 </p>
----
-
-**ChaosLabs** is an open-source chaos engineering toolkit for distributed systems. Run controlled fault injection—network impairment, CPU and memory stress, process kills—and coordinate experiments across agents from a single controller, with a live dashboard and first-class observability hooks.
 
 ---
 
