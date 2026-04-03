@@ -1,8 +1,15 @@
-# ChaosLabs
+<h1 align="center">ChaosLabs</h1>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev/dl/)
-[![Node](https://img.shields.io/badge/Node-20+-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="https://go.dev/dl/"><img src="https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white" alt="Go 1.23+" /></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node-20+-339933?logo=nodedotjs&logoColor=white" alt="Node 20+" /></a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/logo.png" alt="ChaosLabs logo" width="240" />
+</p>
+---
 
 **ChaosLabs** is an open-source chaos engineering toolkit for distributed systems. Run controlled fault injection—network impairment, CPU and memory stress, process kills—and coordinate experiments across agents from a single controller, with a live dashboard and first-class observability hooks.
 
@@ -84,6 +91,10 @@ flowchart LR
   C --> A1
   C --> A2
 ```
+
+<p align="center">
+  <img src="docs/assets/architecture.png" alt="ChaosLabs architecture: Controller, Agent, and Dashboard" width="720" />
+</p>
 
 Deeper detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Kubernetes: [docs/KUBERNETES.md](docs/KUBERNETES.md) · manifests: `infrastructure/k8s/`
 

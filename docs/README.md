@@ -3,6 +3,7 @@
 | Document | Description |
 |----------|-------------|
 | [../README.md](../README.md) | Project overview, quick start, usage |
+| [assets/architecture.png](assets/architecture.png) | High-level system diagram (Controller, Agent, Dashboard) |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Components, repo layout, observability |
 | [KUBERNETES.md](KUBERNETES.md) | Deploying on Kubernetes |
 | [TUTORIAL.md](TUTORIAL.md) | Step-by-step experiment examples |

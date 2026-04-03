@@ -2,6 +2,8 @@
 
 ChaosLabs is a small distributed system for running controlled fault-injection experiments.
 
+![High-level architecture: Controller, Agent, and Dashboard](assets/architecture.png)
+
 ## Components
 
 | Component | Role |
