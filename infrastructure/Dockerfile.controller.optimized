@@ -33,7 +33,7 @@ COPY --from=production-build /usr/share/zoneinfo /usr/share/zoneinfo
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/controller"]
 
-FROM alpine:3.20 AS development-runtime
+FROM alpine:3.23 AS development-runtime
 RUN apk add --no-cache ca-certificates tzdata curl
 COPY --from=development /out/controller-dev /usr/local/bin/controller
 USER 1000:1000
