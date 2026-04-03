@@ -1,8 +1,6 @@
 module github.com/fraware/chaoslabs/controller
 
-go 1.23.0
-
-toolchain go1.24.0
+go 1.25.0
 
 require (
 	github.com/go-playground/validator/v10 v10.19.0
@@ -17,7 +15,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.37.0
 	go.opentelemetry.io/otel/sdk v1.37.0
 	go.opentelemetry.io/otel/trace v1.37.0
-	golang.org/x/time v0.5.0
+	golang.org/x/time v0.15.0
 )
 
 require (
