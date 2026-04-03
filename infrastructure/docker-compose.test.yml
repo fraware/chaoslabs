@@ -1,0 +1,18 @@
+# Services for CI: integration tests (Redis, NATS) and a minimal HTTP target for k6 smoke.
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+    command: ["-js", "-m", "8222"]
+
+  api-mock:
+    image: hashicorp/http-echo:1.0.0
+    command: ["-text=ok", "-listen=:8080"]
+    ports:
+      - "8080:8080"

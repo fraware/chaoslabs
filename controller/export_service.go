@@ -581,7 +581,7 @@ func (es *ExportService) createManifest(job *ExportJob, chunks []ExportFileInfo,
 		Metadata:     job.Metadata,
 		VerificationInstructions: `
 To verify this export:
-1. Download the CLI tool: curl -L https://github.com/your-org/chaoslabs-cli/releases/latest/download/chaoslabs-cli
+1. Download the CLI tool: curl -L https://github.com/fraware/chaoslabs/releases/latest/download/chaoslabs-cli-linux-amd64
 2. Verify signature: chaoslabs-cli verify --manifest manifest.json --public-key public.pem
 3. Check file integrity: chaoslabs-cli check-files --manifest manifest.json
 4. Compare with another export: chaoslabs-cli diff export1.json export2.json

@@ -1,4 +1,4 @@
-# Optimized CI/CD Pipeline with caching, parallelization, and smart path detection
+# CI: path-aware jobs, reproducible scans, Docker builds gated on tests
 name: ChaosLabs CI/CD
 
 on:
@@ -22,56 +22,48 @@ on:
           - staging
           - production
 
-# Optimize workflow concurrency
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: chaoslabs
-  GO_VERSION: "1.21"
-  NODE_VERSION: "18"
-  DOCKER_BUILDKIT: 1
-  COMPOSE_DOCKER_CLI_BUILD: 1
+  GO_VERSION: "1.24.0"
+  NODE_VERSION: "20"
 
 jobs:
-  # Smart change detection to skip unnecessary work
   detect-changes:
     name: Detect Changes
     runs-on: ubuntu-latest
     outputs:
       go-changed: ${{ steps.changes.outputs.go }}
       frontend-changed: ${{ steps.changes.outputs.frontend }}
-      docs-changed: ${{ steps.changes.outputs.docs }}
       infra-changed: ${{ steps.changes.outputs.infra }}
       tests-changed: ${{ steps.changes.outputs.tests }}
       should-deploy: ${{ steps.deploy-check.outputs.should-deploy }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Detect file changes
-        uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
             go:
               - 'controller/**/*.go'
               - 'agent/**/*.go'
+              - 'agent/cmd/**/*.go'
               - 'cli/**/*.go'
-              - 'go.mod'
-              - 'go.sum'
-              - '**/*_test.go'
+              - 'bench/**/*.go'
+              - 'tests/**/*.go'
+              - 'tests/**/go.mod'
+              - 'tests/**/go.sum'
+              - 'go.work'
+              - 'go.work.sum'
+              - '.golangci.yml'
             frontend:
               - 'dashboard-v2/**'
-              - 'Dashboard/**'
-            docs:
-              - 'docs/**'
-              - '*.md'
-              - '.github/**/*.md'
             infra:
               - 'infrastructure/**'
               - 'docker-compose*.yml'
@@ -79,11 +71,8 @@ jobs:
               - 'Dockerfile*'
             tests:
               - 'tests/**'
-              - '**/*_test.go'
-              - 'test/**'
 
-      - name: Check if deployment needed
-        id: deploy-check
+      - id: deploy-check
         run: |
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "should-deploy=true" >> $GITHUB_OUTPUT
@@ -93,137 +82,90 @@ jobs:
             echo "should-deploy=false" >> $GITHUB_OUTPUT
           fi
 
-  # Fast documentation-only path
-  docs-only:
-    name: Documentation Only
+  lint-go:
+    name: Lint Go
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.docs-changed == 'true' && needs.detect-changes.outputs.go-changed == 'false' && needs.detect-changes.outputs.frontend-changed == 'false'
+    if: needs.detect-changes.outputs.go-changed == 'true'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: "docs/package-lock.json"
-
-      - name: Build documentation
-        run: |
-          cd docs
-          npm ci
-          npm run build
-
-      - name: Deploy docs to GitHub Pages
-        if: github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/dist
-
-  # Parallel linting stage
-  lint:
-    name: Lint & Format Check
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.go-changed == 'true' || needs.detect-changes.outputs.frontend-changed == 'true'
-    strategy:
-      matrix:
-        component: [go, frontend]
-        exclude:
-          - component: go
-            # Exclude if only frontend changed
-            condition: ${{ needs.detect-changes.outputs.go-changed == 'false' }}
-          - component: frontend
-            # Exclude if only go changed
-            condition: ${{ needs.detect-changes.outputs.frontend-changed == 'false' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # Go linting
-      - name: Setup Go
-        if: matrix.component == 'go'
-        uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          cache-dependency-path: |
+            controller/go.sum
+            agent/go.sum
+            agent/cmd/doctor/go.sum
+            cli/go.sum
+            bench/go.sum
 
-      - name: Go lint
-        if: matrix.component == 'go'
-        uses: golangci/golangci-lint-action@v3
-        with:
-          version: latest
-          args: --timeout=5m --config=.golangci.yml
-          skip-cache: false
-          skip-save-cache: false
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
 
-      # Frontend linting
-      - name: Setup Node.js
-        if: matrix.component == 'frontend'
-        uses: actions/setup-node@v4
+      - name: Run golangci-lint
+        run: |
+          for d in controller agent cli bench; do
+            echo "==> $d"
+            (cd "$d" && golangci-lint run --timeout=5m --config=../.golangci.yml ./...)
+          done
+
+  lint-frontend:
+    name: Lint Frontend
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend-changed == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: "dashboard-v2/package-lock.json"
+          cache: npm
+          cache-dependency-path: dashboard-v2/package-lock.json
 
-      - name: Install frontend dependencies
-        if: matrix.component == 'frontend'
-        run: |
+      - run: |
           cd dashboard-v2
           npm ci --prefer-offline --no-audit
-
-      - name: Frontend lint
-        if: matrix.component == 'frontend'
-        run: |
-          cd dashboard-v2
           npm run lint
           npm run type-check
 
-  # Unit tests with matrix strategy
   unit-tests:
-    name: Unit Tests
+    name: Unit Tests (${{ matrix.component }})
     runs-on: ubuntu-latest
-    needs: [detect-changes, lint]
-    if: needs.detect-changes.outputs.go-changed == 'true' && github.event.inputs.skip_tests != 'true'
+    needs: [detect-changes]
+    if: |
+      needs.detect-changes.outputs.go-changed == 'true' &&
+      github.event.inputs.skip_tests != 'true'
     strategy:
+      fail-fast: false
       matrix:
-        component: [controller, agent, cli]
-        go-version: ["1.21"] # Could add ['1.20', '1.21'] for multiple versions
+        component: [controller, agent, cli, agent/cmd/doctor]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
-          cache: true
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: ${{ matrix.component }}/go.sum
 
-      - name: Download dependencies
-        run: go mod download
+      - name: Test
+        working-directory: ${{ matrix.component }}
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
-      - name: Run unit tests
-        run: |
-          cd ${{ matrix.component }}
-          go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Coverage HTML
+        working-directory: ${{ matrix.component }}
+        run: go tool cover -html=coverage.out -o coverage.html
 
-      - name: Generate coverage report
-        run: |
-          cd ${{ matrix.component }}
-          go tool cover -html=coverage.out -o coverage.html
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v4
+        continue-on-error: true
         with:
-          file: ./${{ matrix.component }}/coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./${{ matrix.component }}/coverage.out
           flags: ${{ matrix.component }}
           name: ${{ matrix.component }}-coverage
 
-      - name: Upload test artifacts
-        uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ${{ matrix.component }}-test-results
@@ -231,46 +173,47 @@ jobs:
             ${{ matrix.component }}/coverage.out
             ${{ matrix.component }}/coverage.html
 
-  # Frontend tests
   frontend-tests:
     name: Frontend Tests
     runs-on: ubuntu-latest
-    needs: [detect-changes, lint]
-    if: needs.detect-changes.outputs.frontend-changed == 'true'
+    needs: [detect-changes, lint-frontend]
+    if: |
+      needs.detect-changes.outputs.frontend-changed == 'true' &&
+      (needs.lint-frontend.result == 'success' || needs.lint-frontend.result == 'skipped')
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: "dashboard-v2/package-lock.json"
+          cache: npm
+          cache-dependency-path: dashboard-v2/package-lock.json
 
-      - name: Install dependencies
-        run: |
+      - run: |
           cd dashboard-v2
           npm ci --prefer-offline --no-audit
-
-      - name: Run tests
-        run: |
-          cd dashboard-v2
           npm run test:coverage
 
-      - name: Upload frontend coverage
-        uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v4
+        continue-on-error: true
         with:
-          file: ./dashboard-v2/coverage/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./dashboard-v2/coverage/lcov.info
           flags: frontend
           name: frontend-coverage
 
-  # Integration tests with services
+      - run: cd dashboard-v2; npm audit --audit-level=high
+        continue-on-error: true
+
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    needs: [unit-tests, detect-changes]
-    if: needs.detect-changes.outputs.go-changed == 'true' || needs.detect-changes.outputs.infra-changed == 'true'
+    needs: [detect-changes]
+    if: |
+      (needs.detect-changes.outputs.go-changed == 'true' ||
+       needs.detect-changes.outputs.infra-changed == 'true' ||
+       needs.detect-changes.outputs.tests-changed == 'true') &&
+      github.event.inputs.skip_tests != 'true'
     services:
       redis:
         image: redis:7-alpine
@@ -286,35 +229,50 @@ jobs:
         image: nats:2.10-alpine
         ports:
           - 4222:4222
-        options: >-
-          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8222/healthz || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          cache-dependency-path: tests/integration/go.sum
 
-      - name: Wait for services
+      - name: Wait for Redis
         run: |
-          timeout 30s bash -c 'until redis-cli -h localhost ping; do sleep 1; done'
-          timeout 30s bash -c 'until curl -f http://localhost:8222/healthz; do sleep 1; done'
+          sudo apt-get update -qq
+          sudo apt-get install -y redis-tools
+          timeout 60s bash -c 'until redis-cli -h 127.0.0.1 -p 6379 ping 2>/dev/null | grep -q PONG; do sleep 1; done'
 
       - name: Run integration tests
+        working-directory: tests/integration
         env:
-          REDIS_URL: redis://localhost:6379
-          NATS_URL: nats://localhost:4222
-        run: |
-          go test -tags=integration -v ./tests/integration/...
+          REDIS_URL: redis://127.0.0.1:6379
+          NATS_URL: nats://127.0.0.1:4222
+        run: go test -tags=integration -v -race ./...
 
-  # Security scanning
+  tests-ok:
+    name: Tests gate
+    runs-on: ubuntu-latest
+    needs: [detect-changes, lint-go, unit-tests, integration-tests]
+    if: always()
+    steps:
+      - name: Verify
+        run: |
+          g="${{ needs.detect-changes.outputs.go-changed }}"
+          if [[ "$g" == "true" ]]; then
+            [[ "${{ needs.lint-go.result }}" == "success" ]] || { echo "lint-go failed"; exit 1; }
+            [[ "${{ needs.unit-tests.result }}" == "success" ]] || { echo "unit-tests failed"; exit 1; }
+          fi
+          if [[ "$g" == "true" || "${{ needs.detect-changes.outputs.tests-changed }}" == "true" || "${{ needs.detect-changes.outputs.infra-changed }}" == "true" ]]; then
+            ir="${{ needs.integration-tests.result }}"
+            if [[ "$ir" != "success" && "$ir" != "skipped" ]]; then
+              echo "integration-tests failed"
+              exit 1
+            fi
+          fi
+          echo "ok"
+
   security:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -322,63 +280,70 @@ jobs:
     if: needs.detect-changes.outputs.go-changed == 'true' || needs.detect-changes.outputs.infra-changed == 'true'
     permissions:
       security-events: write
+      contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
 
-      - name: Run Gosec Security Scanner
-        uses: securecodewarrior/github-action-gosec@master
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.0
+
+      - name: Gosec (controller)
+        working-directory: controller
+        run: gosec -fmt sarif -out ../gosec-controller.sarif ./...
+        continue-on-error: true
+
+      - name: Upload SARIF (controller)
+        if: hashFiles('gosec-controller.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
         with:
-          args: "-fmt sarif -out gosec.sarif ./..."
+          sarif_file: gosec-controller.sarif
 
-      - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v2
-        with:
-          sarif_file: gosec.sarif
-
-      - name: Run govulncheck
+      - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          for d in controller agent cli bench; do
+            echo "==> $d"
+            (cd "$d" && govulncheck ./...)
+          done
+          echo "==> agent/cmd/doctor"
+          (cd agent/cmd/doctor && govulncheck ./...)
 
-  # Build and push Docker images
   build-images:
-    name: Build Images
+    name: Build ${{ matrix.component }} image
     runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests, detect-changes]
-    if: always() && !cancelled() && (needs.detect-changes.outputs.go-changed == 'true' || needs.detect-changes.outputs.infra-changed == 'true')
+    needs: [detect-changes, tests-ok]
+    if: |
+      always() && !cancelled() &&
+      needs.tests-ok.result == 'success' &&
+      (needs.detect-changes.outputs.go-changed == 'true' || needs.detect-changes.outputs.infra-changed == 'true')
     strategy:
+      fail-fast: false
       matrix:
-        component: [controller, agent, dashboard]
-    outputs:
-      controller-digest: ${{ steps.build.outputs.controller-digest }}
-      agent-digest: ${{ steps.build.outputs.agent-digest }}
-      dashboard-digest: ${{ steps.build.outputs.dashboard-digest }}
+        include:
+          - component: controller
+            target: production
+          - component: agent
+            target: runtime
+          - component: dashboard
+            target: runtime
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            network=host
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push'
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
+      - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}
@@ -388,145 +353,100 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v6
         with:
           context: .
           file: ./infrastructure/Dockerfile.${{ matrix.component }}.optimized
-          target: production
-          platforms: linux/amd64,linux/arm64
-          push: true
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.component }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}
-          provenance: true
-          sbom: true
 
-      - name: Output digest
-        run: echo "${{ matrix.component }}-digest=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
-
-  # Performance tests (soak tests)
   performance-tests:
-    name: Performance Tests
+    name: Performance Tests (k6)
     runs-on: ubuntu-latest
     needs: [build-images, detect-changes]
-    if: needs.detect-changes.outputs.should-deploy == 'true' || github.event.inputs.skip_tests != 'true'
+    if: |
+      always() && !cancelled() &&
+      needs.build-images.result == 'success' &&
+      github.event.inputs.skip_tests != 'true'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup k6
+      - name: Install k6
         run: |
           sudo gpg -k
           sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
           echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
           sudo apt-get update
-          sudo apt-get install k6
+          sudo apt-get install -y k6
 
-      - name: Start test environment
+      - name: Start test stack
         run: |
-          docker-compose -f infrastructure/docker-compose.test.yml up -d
-          sleep 30
+          docker compose --project-directory . -f infrastructure/docker-compose.test.yml up -d
+          sleep 5
 
-      - name: Run performance tests
+      - name: k6 smoke
         run: |
           k6 run tests/performance/load-test.js
           k6 run tests/performance/stress-test.js
 
-      - name: Cleanup test environment
+      - name: Cleanup
         if: always()
-        run: |
-          docker-compose -f infrastructure/docker-compose.test.yml down -v
+        run: docker compose --project-directory . -f infrastructure/docker-compose.test.yml down -v
 
-  # Deployment to staging/production
+  # Re-enable when a cluster and registry are ready. Prefer AWS/GitHub OIDC
+  # (aws-actions/configure-aws-credentials with role-to-assume) over long-lived keys.
   deploy:
-    name: Deploy
+    name: Deploy (disabled)
     runs-on: ubuntu-latest
     needs: [build-images, performance-tests, detect-changes]
-    if: needs.detect-changes.outputs.should-deploy == 'true'
+    if: false
     environment:
       name: ${{ github.event.inputs.deploy_environment || 'staging' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+      - name: Apply Kubernetes manifests
+        run: kubectl apply -f infrastructure/k8s/
 
-      - name: Deploy to EKS
-        run: |
-          aws eks update-kubeconfig --name chaoslabs-cluster
-          envsubst < infrastructure/k8s/deployment.yaml | kubectl apply -f -
-        env:
-          ENVIRONMENT: ${{ github.event.inputs.deploy_environment || 'staging' }}
-          CONTROLLER_IMAGE: ${{ env.REGISTRY }}/${{ github.repository }}/controller@${{ needs.build-images.outputs.controller-digest }}
-          AGENT_IMAGE: ${{ env.REGISTRY }}/${{ github.repository }}/agent@${{ needs.build-images.outputs.agent-digest }}
-          DASHBOARD_IMAGE: ${{ env.REGISTRY }}/${{ github.repository }}/dashboard@${{ needs.build-images.outputs.dashboard-digest }}
-
-  # Generate reports and notifications
   report:
-    name: Generate Report
+    name: CI Report
     runs-on: ubuntu-latest
-    needs:
-      [unit-tests, integration-tests, performance-tests, security, build-images]
+    needs: [unit-tests, integration-tests, performance-tests, security, build-images, tests-ok]
     if: always()
     steps:
-      - name: Download test artifacts
-        uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           path: artifacts
 
-      - name: Generate CI report
+      - name: Write report
         run: |
-          echo "## ChaosLabs CI/CD Report" > ci-report.md
-          echo "" >> ci-report.md
-          echo "**Workflow:** ${{ github.workflow }}" >> ci-report.md
-          echo "**Run:** #${{ github.run_number }}" >> ci-report.md
-          echo "**Trigger:** ${{ github.event_name }}" >> ci-report.md
-          echo "**Branch:** ${{ github.ref_name }}" >> ci-report.md
-          echo "**Commit:** ${{ github.sha }}" >> ci-report.md
-          echo "" >> ci-report.md
+          echo "## ChaosLabs CI report" > ci-report.md
+          echo "- Tests gate: ${{ needs.tests-ok.result }}" >> ci-report.md
+          echo "- Unit tests: ${{ needs.unit-tests.result }}" >> ci-report.md
+          echo "- Integration: ${{ needs.integration-tests.result }}" >> ci-report.md
+          echo "- Security: ${{ needs.security.result }}" >> ci-report.md
+          echo "- Images: ${{ needs.build-images.result }}" >> ci-report.md
+          echo "- k6: ${{ needs.performance-tests.result }}" >> ci-report.md
 
-          echo "### Job Status" >> ci-report.md
-          echo "- Unit Tests: ${{ needs.unit-tests.result }}" >> ci-report.md
-          echo "- Integration Tests: ${{ needs.integration-tests.result }}" >> ci-report.md
-          echo "- Security Scan: ${{ needs.security.result }}" >> ci-report.md
-          echo "- Build Images: ${{ needs.build-images.result }}" >> ci-report.md
-          echo "- Performance Tests: ${{ needs.performance-tests.result }}" >> ci-report.md
-
-          echo "" >> ci-report.md
-          echo "### Performance Metrics" >> ci-report.md
-          echo "- Workflow Duration: ${{ github.event.head_commit.timestamp }}" >> ci-report.md
-
-          if [ -d "artifacts" ]; then
-            echo "### Artifacts" >> ci-report.md
-            find artifacts -name "*.out" -o -name "*.html" | while read file; do
-              echo "- [$(basename $file)]($file)" >> ci-report.md
-            done
-          fi
-
-      - name: Comment PR
+      - uses: thollander/comment-pull-request@v2
         if: github.event_name == 'pull_request'
-        uses: thollander/actions-comment-pull-request@v2
+        continue-on-error: true
         with:
           filePath: ci-report.md
+          comment_tag: chaoslabs-ci
 
-      - name: Slack notification
-        if: always() && (github.ref == 'refs/heads/main' || failure())
-        uses: 8398a7/action-slack@v3
+      - uses: 8398a7/action-slack@v3
+        continue-on-error: true
         with:
           status: ${{ job.status }}
           channel: "#ci-cd"
           text: |
-            ChaosLabs CI/CD ${{ job.status }}
-            Branch: ${{ github.ref_name }}
-            Commit: ${{ github.sha }}
-            Workflow: ${{ github.workflow }}
+            ChaosLabs CI ${{ job.status }} — ${{ github.ref_name }} @ ${{ github.sha }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

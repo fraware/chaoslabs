@@ -14,15 +14,13 @@ This guide helps you set up the ChaosLabs development environment on Windows 10/
    # Or download from: https://git-scm.com/download/win
    ```
 
-2. **Go 1.21+**
+2. **Go 1.23+** (toolchain 1.24 as used by modules; see root `go.work`)
    ```powershell
-   # Using winget
    winget install GoLang.Go
-   
-   # Or download from: https://golang.org/dl/
+   # Or: https://go.dev/dl/
    ```
 
-3. **Node.js 18+**
+3. **Node.js 20+**
    ```powershell
    # Using winget
    winget install OpenJS.NodeJS
@@ -100,14 +98,13 @@ winget install Git.Git GoLang.Go OpenJS.NodeJS Docker.DockerDesktop
 ### Clone and Setup
 ```powershell
 # Clone the repository
-git clone https://github.com/your-org/chaoslabs.git
+git clone https://github.com/fraware/chaoslabs.git
 cd chaoslabs
 
 # Run the setup script
 powershell -ExecutionPolicy Bypass -File infrastructure/devtools/scripts/dev-setup.ps1
 
-# Alternative: Use Make if installed
-make setup
+# Optional: after dependencies are installed, run `make verify` (needs golangci-lint and npm).
 ```
 
 ### Verify Installation
@@ -132,7 +129,7 @@ docker run hello-world
 .\infrastructure\devtools\scripts\dev-setup.ps1
 
 # Start development environment
-docker-compose -f infrastructure/docker-compose.dev.yml up
+docker compose --project-directory . -f infrastructure/docker-compose.dev.yml up
 
 # Run quality checks
 .\scripts\check-all.ps1
@@ -146,28 +143,16 @@ docker-compose -f infrastructure/docker-compose.dev.yml up
 
 ### Using Make (if installed)
 
+From the repo root, targets include:
+
 ```powershell
-# Show all available commands
-make help
-
-# Setup development environment
-make setup
-
-# Start development environment
-make dev
-
-# Build all components
-make build
-
-# Run tests
-make test
-
-# Run quality checks
-make check-all
-
-# Generate performance report
-make perf-report
+make tidy       # go work sync + go mod tidy in modules
+make test       # controller, agent, cli tests
+make verify     # tidy, lint-go, test, lint-frontend (needs golangci-lint, npm)
+make integration-test   # needs Redis/NATS (see tests/integration/README.md)
 ```
+
+See [Makefile](../Makefile) for the authoritative list.
 
 ### Manual Commands
 
@@ -299,10 +284,10 @@ docker info
 docker ps
 
 # Check services
-docker-compose -f infrastructure/docker-compose.dev.yml ps
+docker compose --project-directory . -f infrastructure/docker-compose.dev.yml ps
 
 # View logs
-docker-compose -f infrastructure/docker-compose.dev.yml logs
+docker compose --project-directory . -f infrastructure/docker-compose.dev.yml logs
 
 # Reset Docker
 docker system prune -a
@@ -323,17 +308,16 @@ $env:DOCKER_BUILDKIT = "1"
 $env:COMPOSE_DOCKER_CLI_BUILD = "1"
 ```
 
-## Getting Help
+## Getting help
 
-- **Project Issues**: Open an issue on GitHub
-- **Windows-specific help**: Check the [Windows Development Guide](./windows-dev-guide.md)
-- **Docker Desktop help**: [Docker Desktop for Windows documentation](https://docs.docker.com/desktop/windows/)
-- **Go on Windows**: [Go Windows Installation Guide](https://golang.org/doc/install)
+- **Project issues:** GitHub Issues on [fraware/chaoslabs](https://github.com/fraware/chaoslabs)
+- **This guide:** [windows-setup.md](windows-setup.md) (you are here)
+- **Docker Desktop:** [Docker Desktop for Windows](https://docs.docker.com/desktop/windows/)
+- **Go on Windows:** [Install Go](https://go.dev/doc/install)
 
-## Next Steps
+## Next steps
 
-After setup:
-1. Read the [Development Guide](./development.md)
-2. Check out the [Architecture Overview](./architecture.md)
-3. Review the [Contributing Guidelines](../CONTRIBUTING.md)
-4. Start with `make help` or `.\scripts\check-all.ps1`
+1. Read the [root README](../README.md) and [docs/README.md](README.md)
+2. See [ARCHITECTURE.md](ARCHITECTURE.md)
+3. Review [CONTRIBUTING.md](CONTRIBUTING.md)
+4. Run `make verify` from the repo root, or `.\scripts\check-all.ps1` for a Windows-oriented check script

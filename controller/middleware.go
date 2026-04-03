@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -404,13 +406,35 @@ func ConditionalGetMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// ctxKey is used for request-scoped values (avoid collisions with external packages).
+type ctxKey string
+
+const ctxKeyRequestID ctxKey = "request_id"
+
+const headerRequestID = "X-Request-Id"
+
+// RequestIDMiddleware ensures each request has a stable ID (header or generated) for logging and tracing.
+func RequestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimSpace(r.Header.Get(headerRequestID))
+		if id == "" {
+			b := make([]byte, 16)
+			_, _ = rand.Read(b)
+			id = hex.EncodeToString(b)
+		}
+		w.Header().Set(headerRequestID, id)
+		ctx := context.WithValue(r.Context(), ctxKeyRequestID, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // CORSMiddleware handles CORS headers
 func CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-User-Role")
-		w.Header().Set("Access-Control-Expose-Headers", "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-User-Role, X-Request-Id")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Request-Id, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)

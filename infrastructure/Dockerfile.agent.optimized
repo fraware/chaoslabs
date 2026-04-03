@@ -32,8 +32,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o agent .
 
 # Final stage - minimal runtime image
-FROM alpine:3.18 AS runtime
-RUN apk --no-cache add ca-certificates tzdata
+FROM alpine:3.20 AS runtime
+RUN apk --no-cache add ca-certificates tzdata wget
 WORKDIR /app
 
 # Create non-root user
@@ -44,13 +44,12 @@ RUN addgroup -g 1000 chaoslabs && \
 COPY --from=production --chown=1000:1000 /app/agent .
 RUN chmod +x ./agent
 
-# Add health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD ./agent --health-check || exit 1
+# Metrics endpoint is always registered; use it as a liveness probe.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:9090/metrics >/dev/null || exit 1
 
-# Switch to non-root user
 USER 1000:1000
-EXPOSE 8081 2346
+EXPOSE 9090
 ENTRYPOINT ["./agent"]
 
 # Debug variant - includes delve debugger
@@ -58,5 +57,5 @@ FROM golang:1.24-alpine AS debug
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
 WORKDIR /app
 COPY --from=development /app .
-EXPOSE 8081 2346
+EXPOSE 9090 2346
 CMD ["dlv", "--listen=:2346", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "./agent-dev"]

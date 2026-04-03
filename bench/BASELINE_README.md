@@ -1,6 +1,8 @@
-# ChaosLabs Performance & Reliability Baseline
+# ChaosLabs performance and reliability baseline
 
-This document establishes the performance and reliability baseline for the ChaosLabs controller→agent→kernel toolchain. It defines performance targets, measurement methodologies, and provides guidance for interpreting benchmark results.
+This document establishes performance and reliability targets for the ChaosLabs controller→agent→kernel path. For how to run benchmarks and tooling setup, see [README.md](README.md) in this directory.
+
+**Toolchain:** Use the Go version required by the `bench` module and root `go.work` (Go 1.23+, toolchain 1.24 as pinned in sibling modules).
 
 ## Overview
 
@@ -129,7 +131,7 @@ export CONCURRENCY="20"
 ### Docker Environment
 ```bash
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # Run benchmarks
 ./run_benchmarks.sh \

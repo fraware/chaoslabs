@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -135,9 +137,9 @@ func NewHealthChecker(version string) *HealthChecker {
 		Critical:  false,
 	})
 
-	hc.RegisterDependency("jaeger", HealthDependency{
-		Name:      "jaeger",
-		CheckFunc: hc.checkJaeger,
+	hc.RegisterDependency("tracing", HealthDependency{
+		Name:      "tracing",
+		CheckFunc: hc.checkTracingBackend,
 		Timeout:   3 * time.Second,
 		Interval:  60 * time.Second,
 		Critical:  false,
@@ -358,12 +360,15 @@ func (hc *HealthChecker) checkAgents() error {
 	return fmt.Errorf("no healthy agents found")
 }
 
-func (hc *HealthChecker) checkJaeger() error {
-	// Check Jaeger collector health
+func (hc *HealthChecker) checkTracingBackend() error {
+	u := strings.TrimSpace(os.Getenv("OTEL_HEALTHCHECK_URL"))
+	if u == "" {
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://jaeger-collector:14269/health", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return err
 	}
@@ -375,7 +380,7 @@ func (hc *HealthChecker) checkJaeger() error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("jaeger collector returned status %d", resp.StatusCode)
+		return fmt.Errorf("tracing health endpoint returned status %d", resp.StatusCode)
 	}
 
 	return nil

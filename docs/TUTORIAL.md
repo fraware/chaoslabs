@@ -1,19 +1,18 @@
-# ChaosLab Tutorial
+# ChaosLabs tutorial
 
-Welcome to the ChaosLab Tutorial! This guide will walk you through setting up and running various chaos experiments using ChaosLab.
+This guide walks through common chaos experiments against a running controller and agent.
 
 ## Prerequisites
 
-Before you begin, ensure you have:
-- ChaosLab installed and running (see [Setup & Installation](../README.md#setup--installation))
-- Access to a Kubernetes cluster or local environment via Docker Compose
-- Basic familiarity with chaos engineering concepts
+- Controller on `http://localhost:8080` and agent reachable from the controller (see [Setup & Installation](../README.md#setup--installation)).
+- Docker Compose or local `go run` for both services.
+- Optional: dashboard at [http://localhost:3000](http://localhost:3000) (`dashboard-v2` dev server or Compose `dashboard` service).
 
-## Tutorial 1: Running a CPU Stress Test
+## Tutorial 1: CPU stress
 
-### Step 1: Prepare the Experiment Request
+### Step 1: Create the request
 
-Create a file named `cpu_stress.json` with the following content:
+`cpu_stress.json`:
 
 ```json
 {
@@ -25,24 +24,21 @@ Create a file named `cpu_stress.json` with the following content:
 }
 ```
 
-### Step 2: Start the Experiment
+### Step 2: Start the experiment
 
-Send the request to the controller:
 ```bash
 curl -X POST -H "Content-Type: application/json" -d @cpu_stress.json http://localhost:8080/start
 ```
 
-### Step 3: Monitor the Experiment
+### Step 3: Monitor
 
-- Check controller and agent logs for status.
-- Open the dashboard at http://localhost:5500 to view the experiment status.
-- Visit the Prometheus metrics endpoint at `http://<controller-ip>:8080/metrics`.
+- Controller and agent logs (JSON logs on the agent; structured **slog** on the controller).
+- Dashboard at http://localhost:3000 (if running).
+- Metrics: `http://localhost:8080/metrics` and `http://localhost:9090/metrics`.
 
-## Tutorial 2: Simulating Network Latency
+## Tutorial 2: Network latency
 
-### Step 1: Prepare the Request
-
-Create a file named `network_latency.json`:
+`network_latency.json`:
 
 ```json
 {
@@ -54,21 +50,18 @@ Create a file named `network_latency.json`:
 }
 ```
 
-### Step 2: Start the Experiment
 ```bash
 curl -X POST -H "Content-Type: application/json" -d @network_latency.json http://localhost:8080/start
 ```
 
-### Step 3: Verify Execution
+Confirm in agent logs that `tc` / netem changes were applied and reverted. Use Grafana if you import the repo’s dashboard JSON.
 
-- Confirm in the agent logs that latency was applied and later removed.
-- Check Grafana for network fault metrics.
+## Tutorial 3: Memory stress and process kill
 
-## Tutorial 3: Memory Stress and Process Kill
+### Memory stress
 
-### Memory Stress
+`mem_stress.json`:
 
-Create `mem_stress.json`:
 ```json
 {
   "name": "Memory Stress Test",
@@ -79,13 +72,14 @@ Create `mem_stress.json`:
 }
 ```
 
-Start the experiment:
 ```bash
 curl -X POST -H "Content-Type: application/json" -d @mem_stress.json http://localhost:8080/start
 ```
 
-### Process Kill
-Create `process_kill.json`:
+### Process kill
+
+`process_kill.json`:
+
 ```json
 {
   "name": "Process Kill Test",
@@ -95,20 +89,17 @@ Create `process_kill.json`:
 }
 ```
 
-Start the experiment:
 ```bash
 curl -X POST -H "Content-Type: application/json" -d @process_kill.json http://localhost:8080/start
 ```
 
-## Additional Scenarios
-- **Scheduled Experiments:**
-Include a `start_time` (RFC3339 format) in your JSON to schedule experiments.
-- **Parallel Experiments:**
-Set `"parallel": true` and specify `"agent_count"` to run experiments on multiple agents concurrently.
+## Scheduling and parallel runs
 
-## Next Steps
-- Experiment with different parameters and fault types.
-- Monitor your experiments with the integrated Prometheus and Grafana dashboards.
-- Share your findings or suggest improvements via GitHub Issues or Discussions.
+- **Scheduled:** add `start_time` in RFC3339 format to the JSON body.
+- **Parallel:** set `"parallel": true` and `"agent_count"` to fan out to multiple agents.
 
-For further assistance, consult the Troubleshooting Guide or contact the community.
+## Next steps
+
+- Tune experiments and watch Prometheus metrics.
+- Configure **OTLP** tracing (`OTEL_EXPORTER_OTLP_ENDPOINT`) per [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+- Report issues or ideas via GitHub (see [CONTRIBUTING.md](CONTRIBUTING.md)).

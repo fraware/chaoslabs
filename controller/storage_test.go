@@ -3,6 +3,8 @@ package main
 import (
 	"testing"
 	"time"
+
+	tsm "github.com/fraware/chaoslabs/controller/internal/migrate"
 )
 
 // TestTimeSeriesManagerCreation tests the creation of a time-series manager
@@ -162,7 +164,7 @@ func TestRetentionPolicy(t *testing.T) {
 
 // TestCollectionStats tests the CollectionStats structure
 func TestCollectionStats(t *testing.T) {
-	stats := CollectionStats{
+	stats := tsm.CollectionStats{
 		Count:       1000,
 		Size:        1024 * 1024, // 1MB
 		StorageSize: 2048 * 1024, // 2MB
@@ -199,18 +201,18 @@ func TestCollectionStats(t *testing.T) {
 // TestMigrationResult tests the MigrationResult structure
 func TestMigrationResult(t *testing.T) {
 	now := time.Now()
-	result := MigrationResult{
+	result := tsm.MigrationResult{
 		CollectionName:     "test_collection",
 		RecordsMigrated:    5000,
 		MigrationDuration:  30 * time.Second,
 		PerformanceGain:    25.5,
 		DiskUsageReduction: 40.0,
-		BeforeStats: CollectionStats{
+		BeforeStats: tsm.CollectionStats{
 			Count:       5000,
 			StorageSize: 100 * 1024 * 1024, // 100MB
 			QueryTime:   200 * time.Millisecond,
 		},
-		AfterStats: CollectionStats{
+		AfterStats: tsm.CollectionStats{
 			Count:       5000,
 			StorageSize: 60 * 1024 * 1024, // 60MB
 			QueryTime:   150 * time.Millisecond,

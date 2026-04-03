@@ -181,7 +181,7 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 dev: ## Start development environment
-	docker-compose -f infrastructure/docker-compose.dev.yml up
+	docker compose --project-directory . -f infrastructure/docker-compose.dev.yml up
 
 dev-controller: ## Start controller with hot reload
 	air -c .air.toml
@@ -218,7 +218,7 @@ clean: ## Clean build artifacts
 	cd dashboard-v2 && rm -rf dist/
 
 docker-dev: ## Build development Docker images
-	docker-compose -f infrastructure/docker-compose.dev.yml build
+	docker compose --project-directory . -f infrastructure/docker-compose.dev.yml build
 
 docker-build: ## Build production Docker images
 	docker build -f infrastructure/Dockerfile.controller.optimized -t chaoslabs/controller:latest .
@@ -235,13 +235,13 @@ deploy-staging: ## Deploy to staging
 	kubectl apply -f infrastructure/k8s/ --namespace=chaoslabs-staging
 
 logs-controller: ## Show controller logs
-	docker-compose -f infrastructure/docker-compose.dev.yml logs -f controller
+	docker compose --project-directory . -f infrastructure/docker-compose.dev.yml logs -f controller
 
 logs-agent: ## Show agent logs
-	docker-compose -f infrastructure/docker-compose.dev.yml logs -f agent
+	docker compose --project-directory . -f infrastructure/docker-compose.dev.yml logs -f agent
 
 db-shell: ## Connect to Redis shell
-	docker-compose -f infrastructure/docker-compose.dev.yml exec redis redis-cli
+	docker compose --project-directory . -f infrastructure/docker-compose.dev.yml exec redis redis-cli
 
 monitoring: ## Open monitoring dashboards
 	@echo "Opening monitoring dashboards..."
@@ -403,13 +403,13 @@ cat > scripts/reset-dev.sh << 'EOF'
 echo "🔄 Resetting development environment..."
 
 # Stop all containers
-docker-compose -f infrastructure/docker-compose.dev.yml down -v
+docker compose --project-directory . -f infrastructure/docker-compose.dev.yml down -v
 
 # Remove build artifacts
 make clean
 
 # Rebuild everything
-docker-compose -f infrastructure/docker-compose.dev.yml build --no-cache
+docker compose --project-directory . -f infrastructure/docker-compose.dev.yml build --no-cache
 
 echo "✅ Development environment reset complete!"
 EOF

@@ -14,25 +14,25 @@ A command-line tool for verifying cryptographic signatures, checking file integr
 
 ### From Source
 ```bash
-git clone https://github.com/your-org/chaoslabs.git
+git clone https://github.com/fraware/chaoslabs.git
 cd chaoslabs/cli
 go build -o chaoslabs-cli
 ```
 
 ### Pre-built Binaries
-Download from [Releases](https://github.com/your-org/chaoslabs/releases):
+Download from [Releases](https://github.com/fraware/chaoslabs/releases):
 
 ```bash
 # Linux
-curl -L https://github.com/your-org/chaoslabs/releases/latest/download/chaoslabs-cli-linux-amd64 -o chaoslabs-cli
+curl -L https://github.com/fraware/chaoslabs/releases/latest/download/chaoslabs-cli-linux-amd64 -o chaoslabs-cli
 chmod +x chaoslabs-cli
 
 # macOS
-curl -L https://github.com/your-org/chaoslabs/releases/latest/download/chaoslabs-cli-darwin-amd64 -o chaoslabs-cli
+curl -L https://github.com/fraware/chaoslabs/releases/latest/download/chaoslabs-cli-darwin-amd64 -o chaoslabs-cli
 chmod +x chaoslabs-cli
 
 # Windows
-curl -L https://github.com/your-org/chaoslabs/releases/latest/download/chaoslabs-cli-windows-amd64.exe -o chaoslabs-cli.exe
+curl -L https://github.com/fraware/chaoslabs/releases/latest/download/chaoslabs-cli-windows-amd64.exe -o chaoslabs-cli.exe
 ```
 
 ## Usage
@@ -345,7 +345,7 @@ jobs:
       
       - name: Download ChaosLabs CLI
         run: |
-          curl -L https://github.com/your-org/chaoslabs/releases/latest/download/chaoslabs-cli-linux-amd64 -o chaoslabs-cli
+          curl -L https://github.com/fraware/chaoslabs/releases/latest/download/chaoslabs-cli-linux-amd64 -o chaoslabs-cli
           chmod +x chaoslabs-cli
           
       - name: Verify Export
@@ -365,7 +365,7 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        curl -L https://github.com/your-org/chaoslabs/releases/latest/download/chaoslabs-cli-linux-amd64 -o chaoslabs-cli
+                        curl -L https://github.com/fraware/chaoslabs/releases/latest/download/chaoslabs-cli-linux-amd64 -o chaoslabs-cli
                         chmod +x chaoslabs-cli
                         ./chaoslabs-cli verify --manifest exports/manifest.json --public-key keys/public.pem
                         ./chaoslabs-cli check-files --manifest exports/manifest.json --data-dir exports/
@@ -379,11 +379,7 @@ pipeline {
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+See [docs/CONTRIBUTING.md](../docs/CONTRIBUTING.md) and the [documentation index](../docs/README.md). Typical flow: fork, branch, change, test (`cd cli && go test ./...`), open a PR.
 
 ## License
 

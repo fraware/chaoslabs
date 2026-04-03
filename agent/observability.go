@@ -8,12 +8,9 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -61,28 +58,12 @@ type Metrics struct {
 
 // NewObservabilityManager creates a new observability manager for the agent
 func NewObservabilityManager() (*ObservabilityManager, error) {
-	// Initialize Jaeger exporter
-	jaegerExp, err := jaeger.New(jaeger.WithCollectorEndpoint(
-		jaeger.WithEndpoint("http://jaeger-collector:14268/api/traces"),
-	))
+	ctx := context.Background()
+	tp, err := newOTLPTracerProvider(ctx, "chaoslabs-agent", "1.0.0")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Jaeger exporter: %w", err)
+		return nil, fmt.Errorf("otlp tracer: %w", err)
 	}
 
-	// Create trace provider
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(jaegerExp),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-		sdktrace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceName("chaoslabs-agent"),
-			semconv.ServiceVersion("1.0.0"),
-			attribute.String("deployment.environment", getEnv("ENVIRONMENT", "development")),
-			attribute.String("host.name", getEnv("HOSTNAME", "unknown")),
-		)),
-	)
-
-	// Set global trace provider
 	otel.SetTracerProvider(tp)
 
 	// Create meter

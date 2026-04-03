@@ -222,10 +222,10 @@ if ($LASTEXITCODE -eq 0) {
 Write-Host "`nDevelopment Environment Setup Complete!" -ForegroundColor Green
 Write-Host "=======================================" -ForegroundColor Green
 Write-Host "`nNext steps:" -ForegroundColor Cyan
-Write-Host "1. Run docker-compose -f infrastructure/docker-compose.dev.yml up to start the development environment" -ForegroundColor White
+Write-Host "1. Run: docker compose --project-directory . -f infrastructure/docker-compose.dev.yml up" -ForegroundColor White
 Write-Host "2. Open http://localhost:3000 for the dashboard" -ForegroundColor White
 Write-Host "3. Open http://localhost:3001 for Grafana (admin/chaoslabs)" -ForegroundColor White
 Write-Host "4. Open http://localhost:16686 for Jaeger tracing" -ForegroundColor White
 Write-Host "`nUseful commands:" -ForegroundColor Cyan
 Write-Host "  Make commands (if Make installed) or use PowerShell scripts directly" -ForegroundColor White
-Write-Host "  docker-compose -f infrastructure/docker-compose.dev.yml logs -f  - View logs" -ForegroundColor White
+Write-Host "  docker compose --project-directory . -f infrastructure/docker-compose.dev.yml logs -f  - View logs" -ForegroundColor White

@@ -11,8 +11,20 @@ The controller uses a robust HTTP server with the following security and perform
 - **Admission Control**: Bounded worker pool to prevent overload
 - **Recovery**: Panic recovery middleware
 - **Logging**: Request logging with timing information
-- **CORS**: Cross-origin resource sharing support
+- **CORS**: Cross-origin resource sharing support (allows `X-Request-Id` and exposes it to clients)
+- **Request IDs**: Each request gets a stable **`X-Request-Id`** (from the client header or generated); useful for correlating logs and traces
 - **Agent Request Handling**: Configurable timeouts, retries, and backoff for controller→agent calls
+
+### Tracing (OpenTelemetry)
+
+Tracing is exported with **OTLP/HTTP**, not the legacy Jaeger HTTP collector API.
+
+| Variable | Description |
+|----------|-------------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Base URL for OTLP HTTP (e.g. `http://otel-collector:4318`) |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Optional override for traces only |
+| `OTEL_EXPORTER_OTLP_INSECURE` | Set to `true` for plain HTTP |
+| `OTEL_HEALTHCHECK_URL` | Optional HTTP GET URL returning 200 when the tracing backend is healthy |
 
 ## Environment Variables
 
@@ -185,14 +197,14 @@ The server exposes the following metrics:
 ### Health Checks
 
 ```bash
-# Check server health
-curl -f http://localhost:8080/health
+# Liveness (JSON)
+curl -f http://localhost:8080/healthz
 
-# Check metrics
+# Readiness (JSON)
+curl -f http://localhost:8080/readyz
+
+# Prometheus metrics
 curl http://localhost:8080/metrics
-
-# Check readiness
-curl -f http://localhost:8080/ready
 ```
 
 ## Troubleshooting
@@ -277,21 +289,6 @@ go tool pprof cpu.prof
 - Implement request validation
 - Monitor for unusual traffic patterns
 - Set appropriate retry limits to prevent abuse
-
-## Configuration Validation
-
-The server validates configuration on startup:
-
-```bash
-# Check configuration
-curl -s http://localhost:8080/config | jq '.'
-
-# Validate timeouts
-curl -s http://localhost:8080/config | jq '.timeouts'
-
-# Check agent request settings
-curl -s http://localhost:8080/config | jq '.agent_requests'
-```
 
 ## Migration Guide
 

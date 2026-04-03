@@ -2,23 +2,25 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/jaeger"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func main() {
-	// Initialize distributed tracing via Jaeger.
-	tp, err := initTracer()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+
+	ctx := context.Background()
+	tp, err := newOTLPTracerProvider(ctx, "chaoslabs-controller", "1.0.0")
 	if err != nil {
-		log.Fatalf("failed to initialize tracer: %v", err)
+		slog.Error("failed to initialize tracer", "err", err)
+		os.Exit(1)
 	}
-	// Ensure tracer provider shuts down when the application exits.
 	defer func() { _ = tp.Shutdown(context.Background()) }()
+	otel.SetTracerProvider(tp)
 
 	// Initialize health checker
 	healthChecker := NewHealthChecker("1.0.0")
@@ -34,11 +36,13 @@ func main() {
 	registerHandlers(mux, healthChecker)
 
 	// Apply middleware chain
-	handler := CORSMiddleware(
-		SecurityHeadersMiddleware(
-			rateLimitMiddleware.Middleware(
-				validationMiddleware.Middleware(
-					ConditionalGetMiddleware(mux),
+	handler := RequestIDMiddleware(
+		CORSMiddleware(
+			SecurityHeadersMiddleware(
+				rateLimitMiddleware.Middleware(
+					validationMiddleware.Middleware(
+						ConditionalGetMiddleware(mux),
+					),
 				),
 			),
 		),
@@ -50,32 +54,10 @@ func main() {
 	// Apply middleware to all other routes
 	http.Handle("/", handler)
 
-	log.Println("ChaosLab Controller running on :8080")
-	log.Println("Endpoints:")
-	log.Println("  POST /start - Start chaos experiment")
-	log.Println("  POST /stop - Stop chaos experiment")
-	log.Println("  GET /experiments - List experiments")
-	log.Println("  GET /healthz - Health check")
-	log.Println("  GET /readyz - Readiness check")
-	log.Println("  GET /metrics - Prometheus metrics")
+	slog.Info("ChaosLab Controller listening", "addr", ":8080")
 
 	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatalf("Controller failed to start: %v", err)
+		slog.Error("controller failed", "err", err)
+		os.Exit(1)
 	}
-}
-
-// initTracer sets up an OpenTelemetry tracer provider with Jaeger exporter.
-func initTracer() (*sdktrace.TracerProvider, error) {
-	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(
-		jaeger.WithEndpoint("http://jaeger-collector:14268/api/traces"),
-	))
-	if err != nil {
-		return nil, err
-	}
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exp),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-	)
-	otel.SetTracerProvider(tp)
-	return tp, nil
 }

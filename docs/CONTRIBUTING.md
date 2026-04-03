@@ -1,5 +1,7 @@
 # Contributing to ChaosLabs
 
+Documentation index: [docs/README.md](README.md). Repository overview: [README.md](../README.md).
+
 Thank you for your interest in contributing to ChaosLabs! Your contributions help improve the project and enhance its value for the community. Please review the guidelines below before contributing.
 
 ## How to Contribute
@@ -7,7 +9,7 @@ Thank you for your interest in contributing to ChaosLabs! Your contributions hel
 ### Reporting Issues
 
 - **Before opening an issue:**  
-  - Check the [FAQ](README.md#faq) and [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for similar issues.
+  - Check the [FAQ](../README.md#faq), [Troubleshooting Guide](TROUBLESHOOTING.md), and [documentation index](README.md) for similar issues.
 - **When reporting a bug:**  
   - Use a descriptive title.
   - Provide clear steps to reproduce the issue.
@@ -28,16 +30,16 @@ Write clear, concise commit messages.
 Push your branch to your fork and open a pull request against the `main` branch.
 
   - **Code Style:**
-Follow idiomatic Go style for Go code and PEP8 for Python.
+Follow idiomatic Go style (`gofmt`, `golangci-lint`) and TypeScript/React conventions in `dashboard-v2` (`npm run lint`, `npm run type-check`).
+Run `make verify` before opening a PR when possible.
 Ensure your code passes all tests.
 
   - **Testing:**
 Add or update tests as necessary.
 Verify your changes using the CI/CD pipeline.
 
-### Documentation Contributions
-Help improve documentation by updating the README, Wiki, or adding tutorials under the `docs/` directory.
-Ensure that new features or changes are reflected in the documentation.
+### Documentation contributions
+Update the [root README](../README.md), [docs/README.md](README.md), and focused guides under `docs/`. When you change HTTP handlers, update [api/openapi.yaml](api/openapi.yaml). Keep [ARCHITECTURE.md](ARCHITECTURE.md) in sync for new components or data flows.
 
 ## Community & Communication
   - **Issues & Discussions:**

@@ -1,108 +1,37 @@
-# ChaosLabs: A Chaos Engineering Toolkit
+# ChaosLabs
 
-ChaosLabs is an open-source toolkit designed for chaos engineering experiments in distributed systems. With ChaosLabs you can simulate network faults, resource starvation, and process failures across multiple agents and clusters. The system comprises three main components:
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev/dl/)
+[![Node](https://img.shields.io/badge/Node-20+-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 
-- **Controller:** Orchestrates chaos experiments and dispatches fault injection commands to agents.
-- **Agent:** Executes fault injection experiments (e.g., network latency, CPU stress, memory stress, process kill).
-- **Dashboard:** Provides a user-friendly interface to monitor and manage experiments in real-time.
+**ChaosLabs** is an open-source chaos engineering toolkit for distributed systems. Run controlled fault injection—network impairment, CPU and memory stress, process kills—and coordinate experiments across agents from a single controller, with a live dashboard and first-class observability hooks.
 
-## Table of Contents
-- [ChaosLabs: A Chaos Engineering Toolkit](#chaoslabs-a-chaos-engineering-toolkit)
-  - [Table of Contents](#table-of-contents)
-  - [Architecture](#architecture)
-  - [Features](#features)
-  - [Setup \& Installation](#setup--installation)
-    - [Prerequisites](#prerequisites)
-    - [Local Setup](#local-setup)
-    - [Scheduling \& Parallel Experiments](#scheduling--parallel-experiments)
-  - [Observability \& Monitoring](#observability--monitoring)
-  - [Troubleshooting](#troubleshooting)
-    - [Common Issues](#common-issues)
-  - [FAQ](#faq)
-  - [User Guides \& Tutorials](#user-guides--tutorials)
-  - [Contributing](#contributing)
-  - [License](#license)
+---
 
-## Architecture
+## Quick start
 
-ChaosLabs' architecture is based on a microservices design. The components interact as follows:
+```bash
+git clone https://github.com/fraware/chaoslabs.git
+cd chaoslabs
+docker compose up --build
+```
 
-![Architecture Diagram](docs/architecture.png)
+| When things are up | URL / endpoint |
+|-------------------|----------------|
+| Dashboard | [http://localhost:3000](http://localhost:3000) (`npm run dev` or the `dashboard` service in Compose) |
+| Controller API | `http://localhost:8080` (e.g. `POST /start`) |
 
-- **Controller:**  
-  - Receives experiment requests via HTTP endpoints.  
-  - Schedules experiments (immediately or at a future time) and dispatches them to one or more agents.  
-  - Exposes custom Prometheus metrics (e.g., experiment counts and durations) and distributed tracing via OpenTelemetry/Jaeger.
-  
-- **Agent:**  
-  - Listens for fault injection commands on its `/inject` endpoint.  
-  - Implements various fault injection techniques (network latency/loss via `tc`, CPU/memory stress using `stress-ng`, process kill).  
-  - Exposes Prometheus metrics and distributed tracing data.
-  
-- **Dashboard:**  
-  - Provides a web interface for monitoring experiments in real time and visualizing metrics using Grafana.
-  
-For detailed design diagrams and further documentation, please visit our [Wiki](https://github.com/your-username/chaoslab/wiki).
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` if you run a local OpenTelemetry collector (see `infrastructure/compose/docker-compose.yml`, or the root `docker-compose.yml` wrapper).
 
-## Features
+**Run without Compose:** controller `cd controller && go run .` · agent `cd agent && go run .` · UI `cd dashboard-v2 && npm install && npm run dev`
 
-- **Fault Injection:**  
-  Simulate network faults, resource exhaustion, and process failures.
-  
-- **Scheduling & Parallel Execution:**  
-  Schedule experiments to start in the future or run them concurrently across multiple agents.
-  
-- **Observability:**  
-  Integrated Prometheus metrics, Grafana dashboards, and distributed tracing (Jaeger/OpenTelemetry) for full visibility.
-  
-- **Scalability & Multi-Cluster Support:**  
-  Horizontally scalable components with multi-cluster communication support.
+---
 
-## Setup & Installation
+## Run your first experiment
 
-### Prerequisites
-- [Docker](https://docs.docker.com/get-docker/)
-- [Docker Compose](https://docs.docker.com/compose/install/)
-- Go 1.18 or later
-- Python 3.9 (for the dashboard)
-- Kubernetes (Minikube, Docker Desktop, or a cloud provider)
-- Prometheus & Grafana for monitoring
-- Jaeger for tracing
+CPU stress for 15 seconds:
 
-### Local Setup
-
-1. **Clone the Repository:**
-   ```bash
-   git clone https://github.com/your-username/chaoslabs.git
-   cd chaoslabs
-
-2. **Build & Run Components Locally:**
-
-- Controller: 
-   ```bash
-   cd controller
-   go run main.go
-
-- Agent: 
-   ```bash
-   cd agent
-   go run main.go
-
-- Dashboard: 
-   ```bash
-   cd dashboard-v2
-   npm install
-   npm run dev
-
-3. **Access the Dashboard:** Open your browser at http://localhost:3000.
-
-## 3 Local Setup
-Please refer to the Kubernetes Documentation for detailed instructions on deploying ChaosLabs using the provided manifests.
-
-## Usage
-### Running an Experiment
-Send a POST request to the controller’s `/start` endpoint. For example, to run a CPU stress test:
-   ```bash
+```bash
 curl -X POST -H "Content-Type: application/json" -d '{
     "name": "CPU Stress Test",
     "description": "Runs CPU stress with 4 workers for 15s",
@@ -112,45 +41,126 @@ curl -X POST -H "Content-Type: application/json" -d '{
 }' http://localhost:8080/start
 ```
 
-Other available experiment types:
+| Experiment | `experiment_type` | Typical parameters |
+|------------|-------------------|--------------------|
+| Network latency | `network-latency` | `delay_ms` |
+| Packet loss | `network-loss` | `loss_percent` |
+| Memory stress | `mem-stress` | `mem_size_mb` |
+| Process kill | `process-kill` | `kill_process` |
 
-- **Network Latency:** `"experiment_type": "network-latency", "delay_ms": 100`
-- **Network Packet Loss:** `"experiment_type": "network-loss", "loss_percent": 10`
-- **Memory Stress:** `"experiment_type": "mem-stress", "mem_size_mb": 200`
-- **Process Kill:** `"experiment_type": "process-kill", "kill_process": "go"`
+Use `start_time` (RFC3339) to schedule, or `"parallel": true` with `agent_count` for multi-agent runs. Step-by-step guides: [docs/TUTORIAL.md](docs/TUTORIAL.md).
 
-### Scheduling & Parallel Experiments
-Include a `start_time` (in RFC3339 format) to schedule an experiment, or set `"parallel": true` and specify `"agent_count"` to run on multiple agents concurrently.
+---
 
-## Observability & Monitoring
-- **Prometheus Integration:** Both the controller and agent expose /metrics endpoints with custom metrics. Prometheus is configured to scrape these endpoints via annotations in the Kubernetes manifests.
-- **Grafana Dashboards:** Import the provided Grafana dashboard JSON into Grafana to visualize experiment counts, durations, agent health, and resource utilization.
-- **Distributed Tracing:** Integrated with Jaeger/OpenTelemetry for end-to-end tracing. Adjust the Jaeger collector endpoint as needed.
+## What ships in this repo
 
-## Troubleshooting
-### Common Issues
-- **Image Pull Errors:** Verify that your Docker images are correctly tagged and accessible in your container registry.
-- **Fault Injection Failures:** Some fault injection techniques require privileged access. Ensure your agent container is running with the necessary privileges.
-- **Metrics Not Scraped:** Confirm that the Prometheus annotations in your Kubernetes manifests are correctly set.
-- **Tracing Issues:** Check that the Jaeger collector endpoint is reachable and properly configured.
+| Piece | Responsibility |
+|-------|----------------|
+| **Controller** | HTTP API for experiments, scheduling, dispatch to agents; Prometheus metrics; **OpenTelemetry** traces via **OTLP/HTTP**. |
+| **Agent** | Executes faults (`tc`, `stress-ng`, process signals) on `/inject`; metrics and OTLP tracing (same env vars as the controller). |
+| **Dashboard** | Real-time experiment monitoring and Grafana-oriented workflows. |
+| **CLI** | Export signing, verification, and related tooling ([cli/README.md](cli/README.md)). |
 
-For more details, see the Troubleshooting Guide.
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph operators [Operators]
+    U[Browser / API client]
+  end
+  subgraph control [Control plane]
+    D[Dashboard]
+    C[Controller]
+  end
+  subgraph data [Execution]
+    A1[Agent]
+    A2[Agent]
+  end
+  U --> D
+  U --> C
+  D --> C
+  C --> A1
+  C --> A2
+```
+
+Deeper detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Kubernetes: [docs/KUBERNETES.md](docs/KUBERNETES.md) · manifests: `infrastructure/k8s/`
+
+---
+
+## Features
+
+- **Fault injection** — Network latency and loss, CPU and memory stress, targeted process termination.
+- **Scheduling and scale** — Deferred starts and parallel execution across multiple agents.
+- **Observability** — Prometheus `/metrics`, optional Grafana dashboards, OTLP-compatible tracing (`OTEL_EXPORTER_OTLP_ENDPOINT`).
+- **Deployment options** — Docker Compose for local stacks; Kubernetes for production-style runs.
+
+---
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+- [Go](https://go.dev/dl/) 1.23+ (toolchain aligned with `go.work` / modules)
+- [Node.js](https://nodejs.org/) 20+ and npm for `dashboard-v2`
+- Optional: Kubernetes, Prometheus, Grafana, and an OTLP-capable collector or backend
+
+---
+
+## Observability and monitoring
+
+- **Metrics** — Controller and agent expose Prometheus endpoints; K8s manifests include scrape annotations.
+- **Dashboards** — Import bundled Grafana JSON for experiment counts, durations, agent health, and utilization.
+- **Tracing** — OTLP/HTTP export; point `OTEL_EXPORTER_OTLP_ENDPOINT` at a collector, Jaeger (OTLP), Tempo, or similar.
+
+Configuration reference: [controller/HTTP_CONFIGURATION.md](controller/HTTP_CONFIGURATION.md)
+
+---
+
+## Documentation
+
+| Resource | Description |
+|----------|-------------|
+| [docs/README.md](docs/README.md) | Central index: API OpenAPI, Windows setup, event bus, troubleshooting |
+| [docs/TUTORIAL.md](docs/TUTORIAL.md) | Guided experiments |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Ports, tracing, faults, metrics |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | How to contribute |
+
+---
+
+## Troubleshooting (short list)
+
+- **Images not pulling** — Confirm registry tags and pull secrets.
+- **Faults not applying** — Many injectors need root or privileged containers on the agent.
+- **Missing metrics** — Check Prometheus annotations and scrape config.
+- **Tracing** — Validate `OTEL_EXPORTER_OTLP_ENDPOINT` and optional `OTEL_HEALTHCHECK_URL`.
+
+Full runbook: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+
+---
 
 ## FAQ
-**Q: Do I need root privileges to run ChaosLabs?**
-A: Yes, some fault injection methods (e.g., using `tc netem` and `stress-ng`) require root or privileged container access.
 
-**Q: Can I run ChaosLabs on my local machine?**
-A: Absolutely! You can run all components locally via Docker Compose or individually using the provided scripts.
+**Do I need elevated privileges?**  
+Yes for several techniques (`tc netem`, `stress-ng`, and similar). Run the agent with sufficient capabilities or as root where your environment allows it.
 
-**Q: How can I contribute new fault injection methods?**
-A: Please see our Contributing Guidelines for details.
+**Can I run everything on one machine?**  
+Yes. Docker Compose is the fastest path; you can also run controller, agent, and dashboard processes separately.
 
-## User Guides & Tutorials
-For step-by-step tutorials on running chaos experiments (e.g., CPU stress test, network partition simulation), please refer to the User Guide.
+**How do I add or change fault types?**  
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
+
+**Windows development?**  
+See [docs/windows-setup.md](docs/windows-setup.md).
+
+---
 
 ## Contributing
-We welcome community contributions! See Contributing Guidelines for more information on how to submit issues, feature requests, and pull requests.
+
+Contributions are welcome. Read [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) and, when you can, run `make verify` from the repository root (or `.\scripts\check-all.ps1` on Windows).
+
+---
 
 ## License
-ChaosLabs is licensed under the MIT License. See LICENSE for details.
+
+ChaosLabs is released under the [MIT License](LICENSE).

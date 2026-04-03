@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"strings"
+
+	tsm "github.com/fraware/chaoslabs/controller/internal/migrate"
 )
 
 func main() {
@@ -41,7 +43,7 @@ func main() {
 	}
 
 	// Create migrator
-	migrator, err := NewTimeSeriesMigrator(*mongoURI, *database)
+	migrator, err := tsm.NewTimeSeriesMigrator(*mongoURI, *database)
 	if err != nil {
 		log.Fatalf("Failed to create migrator: %v", err)
 	}

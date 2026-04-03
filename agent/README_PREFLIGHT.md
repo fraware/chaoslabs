@@ -1,347 +1,88 @@
-# ChaosLabs Agent Preflight System
+# Agent preflight and doctor tool
 
-The preflight system ensures your ChaosLabs agent is properly configured and has the necessary capabilities before running chaos engineering experiments.
+The agent includes **preflight** checks (see `preflight.go`) and a small **doctor** CLI under `agent/cmd/doctor` to validate the environment before running fault injection.
 
-## 🚀 Quick Start
+## Quick start
 
-### Run Preflight Checks
+From the repository root:
 
 ```bash
-# Build and run the agent with preflight checks
-make preflight
+cd agent/cmd/doctor
+go run .
+```
 
-# Or use the dedicated doctor CLI tool
-make doctor
+Or build a binary:
 
-# Run checks manually
-cd cmd/doctor
+```bash
+cd agent/cmd/doctor
 go build -o chaoslabs-doctor .
 ./chaoslabs-doctor
 ```
 
-### What Gets Checked
+Optional flags (if implemented in `main.go`): `--format json`, `--verbose`, etc.
 
-✅ **Capabilities**: CAP_NET_ADMIN, CAP_SYS_ADMIN, CAP_SYS_RESOURCE  
-✅ **Tools**: tc, ip, stress-ng, cgcreate, ifconfig  
-✅ **Container**: Privileges, mounts, environment  
-✅ **System**: Kernel modules, memory, disk, CPU  
-✅ **Network**: IFB/netem modules, interfaces  
-
-## 🔧 Installation
-
-### Prerequisites
+To run agent tests (including preflight tests):
 
 ```bash
-# Install required packages
-sudo apt-get install iproute2 stress-ng cgroup-tools net-tools
-
-# Or on CentOS/RHEL
-sudo yum install iproute-tc stress-ng libcgroup-tools net-tools
+cd agent
+go test -race ./...
 ```
 
-### Grant Capabilities
+## What is validated
+
+Typical checks include:
+
+- **Capabilities:** `CAP_NET_ADMIN`, `CAP_SYS_ADMIN`, `CAP_SYS_RESOURCE` where applicable  
+- **Tools:** `tc`, `ip`, `stress-ng`, cgroup utilities, `ifconfig` or `ip`  
+- **Container:** Privileges and mounts when running under Docker or Kubernetes  
+- **System:** Kernel modules (e.g. `sch_netem`, `ifb`), resources  
+- **Network:** Interfaces usable for `tc` / netem  
+
+Exact behavior is defined in `preflight.go` and tests in `preflight_test.go`.
+
+## Prerequisites on Linux
 
 ```bash
-# Grant network capabilities
-sudo setcap cap_net_admin+ep /path/to/chaoslabs-agent
+# Debian/Ubuntu
+sudo apt-get install -y iproute2 stress-ng cgroup-tools net-tools
 
-# Grant system capabilities (optional)
-sudo setcap cap_sys_admin+ep /path/to/chaoslabs-agent
-sudo setcap cap_sys_resource+ep /path/to/chaoslabs-agent
+# RHEL/CentOS
+sudo yum install -y iproute-tc stress-ng libcgroup-tools net-tools
 ```
 
-### Load Kernel Modules
+Load modules when needed:
 
 ```bash
-# Load required network modules
 sudo modprobe sch_netem
 sudo modprobe ifb
 ```
 
-## 📋 Usage Examples
+## Containers
 
-### Basic Preflight Check
-
-```bash
-# Run all checks with text output
-./chaoslabs-doctor
-
-# Output JSON for automation
-./chaoslabs-doctor --format json
-
-# Save results to file
-./chaoslabs-doctor --format json-pretty --output results.json
-```
-
-### Integration in Code
-
-```go
-import "fraware/chaos-controller"
-
-// Before running experiments
-preflightManager := NewPreflightManager()
-result, err := preflightManager.RunAllChecks()
-if err != nil {
-    return fmt.Errorf("preflight failed: %w", err)
-}
-
-if result.Summary.OverallStatus == CheckStatusFail {
-    return fmt.Errorf("critical checks failed")
-}
-
-// Continue with experiment...
-```
-
-### Health Check Integration
-
-```go
-func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
-    preflightManager := NewPreflightManager()
-    result, err := preflightManager.RunAllChecks()
-    
-    if err != nil || result.Summary.OverallStatus == CheckStatusFail {
-        http.Error(w, "Environment unhealthy", http.StatusServiceUnavailable)
-        return
-    }
-    
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(result)
-}
-```
-
-## 🐳 Container Deployment
-
-### Docker
+Agents usually need elevated privileges for `tc` and stress tools, for example:
 
 ```bash
-# Run with necessary capabilities and mounts
 docker run --cap-add=NET_ADMIN --cap-add=SYS_ADMIN \
   -v /proc:/proc -v /sys:/sys -v /dev:/dev \
-  chaoslabs-agent:latest
+  chaoslabs/chaos-agent:latest
 ```
 
-### Kubernetes
+Kubernetes: see `infrastructure/k8s/agent-deployment.yaml` and [docs/KUBERNETES.md](../docs/KUBERNETES.md).
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: chaoslabs-agent
-spec:
-  template:
-    spec:
-      containers:
-      - name: agent
-        image: chaoslabs-agent:latest
-        securityContext:
-          capabilities:
-            add:
-            - NET_ADMIN
-            - SYS_ADMIN
-        volumeMounts:
-        - name: proc
-          mountPath: /proc
-        - name: sys
-          mountPath: /sys
-        - name: dev
-          mountPath: /dev
-      volumes:
-      - name: proc
-        hostPath:
-          path: /proc
-      - name: sys
-        hostPath:
-          path: /sys
-      - name: dev
-        hostPath:
-          path: /dev
-```
+## Troubleshooting
 
-## 🧪 Testing
+| Symptom | What to try |
+|--------|-------------|
+| `tc: command not found` | Install `iproute2` / `iproute-tc` |
+| Operation not permitted | Add `NET_ADMIN` (and often `SYS_ADMIN`) or run privileged where appropriate |
+| Missing module | `modprobe sch_netem` / `ifb` |
 
-### Run Tests
+More: [docs/TROUBLESHOOTING.md](../docs/TROUBLESHOOTING.md).
 
-```bash
-# Run all tests
-make test
+## Module path
 
-# Run preflight tests only
-make test-preflight
+The doctor module is `github.com/fraware/chaoslabs/cmd/doctor` (see `agent/cmd/doctor/go.mod`). It is listed in the repo root `go.work`.
 
-# Run with race detection
-make test-race
+## Contributing
 
-# Run with coverage
-make test-coverage
-```
-
-### Test Specific Components
-
-```bash
-# Test preflight system
-go test -v -run "TestPreflight" ./...
-
-# Test with benchmarks
-go test -v -bench=. -benchmem ./...
-
-# Test specific function
-go test -v -run "TestCheckCapability" ./...
-```
-
-## 📊 Monitoring
-
-### Prometheus Metrics
-
-```go
-// Track preflight check results
-var (
-    preflightChecksTotal = prometheus.NewCounterVec(
-        prometheus.CounterOpts{
-            Name: "preflight_checks_total",
-            Help: "Total number of preflight checks",
-        },
-        []string{"status", "check_type"},
-    )
-)
-```
-
-### Alerting Rules
-
-```yaml
-# Prometheus alert
-groups:
-- name: preflight
-  rules:
-  - alert: PreflightChecksFailed
-    expr: preflight_checks_total{status="fail"} > 0
-    for: 1m
-    labels:
-      severity: critical
-    annotations:
-      summary: "Agent preflight checks failed"
-```
-
-## 🚨 Troubleshooting
-
-### Common Issues
-
-| Issue | Solution |
-|-------|----------|
-| `tc: command not found` | `sudo apt-get install iproute2` |
-| `Operation not permitted` | `sudo setcap cap_net_admin+ep /path/to/agent` |
-| `Module not found` | `sudo modprobe sch_netem ifb` |
-| Container permissions | Run with `--cap-add=NET_ADMIN` |
-
-### Debug Mode
-
-```bash
-# Enable debug output
-export CHAOSLABS_DEBUG=1
-
-# Run with verbose logging
-./chaoslabs-doctor --verbose
-```
-
-### Check Logs
-
-```bash
-# View agent logs
-journalctl -u chaoslabs-agent -f
-
-# Check system capabilities
-cat /proc/$$/status | grep CapEff
-
-# Verify kernel modules
-lsmod | grep -E "(netem|ifb)"
-```
-
-## 📈 Performance
-
-### Execution Times
-
-- **Total preflight**: <25ms
-- **Capability checks**: <1ms
-- **Tool availability**: <5ms
-- **System requirements**: <10ms
-- **Network capabilities**: <5ms
-
-### Optimization
-
-```go
-// Cache results for performance
-type CachedPreflightManager struct {
-    *PreflightManager
-    cache     *PreflightResult
-    cacheTime time.Time
-    cacheTTL  time.Duration
-}
-
-// Run in background
-go func() {
-    for {
-        result, err := preflightManager.RunAllChecks()
-        // Store result for quick access
-        time.Sleep(5 * time.Minute)
-    }
-}()
-```
-
-## 🔒 Security
-
-### Best Practices
-
-- Grant only necessary capabilities
-- Use principle of least privilege
-- Regularly audit capability assignments
-- Avoid running with `--privileged` when possible
-- Implement proper resource limits
-
-### Capability Matrix
-
-| Capability | Required | Purpose |
-|------------|----------|---------|
-| CAP_NET_ADMIN | ✅ | Network fault injection |
-| CAP_SYS_ADMIN | ⚠️ | Advanced stress testing |
-| CAP_SYS_RESOURCE | ⚠️ | Resource management |
-
-## 📚 Documentation
-
-- [Full Preflight Documentation](docs/AGENT_PREFLIGHT_CHECKS.md)
-- [Agent Architecture](docs/AGENT_ARCHITECTURE.md)
-- [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
-- [API Reference](docs/API_REFERENCE.md)
-
-## 🤝 Contributing
-
-### Adding New Checks
-
-1. Implement check logic in `preflight.go`
-2. Add tests in `preflight_test.go`
-3. Update documentation
-4. Include remediation steps
-5. Add metrics and monitoring
-
-### Code Style
-
-```bash
-# Format code
-make format
-
-# Run linting
-make lint
-
-# Run full checks
-make full-check
-```
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/your-repo/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-repo/discussions)
-- **Documentation**: [docs/](docs/) directory
-- **Examples**: [examples/](examples/) directory
-
----
-
-**Quick Reference**: `make doctor` - Run preflight checks  
-**Full Docs**: See [docs/AGENT_PREFLIGHT_CHECKS.md](docs/AGENT_PREFLIGHT_CHECKS.md)
+When adding checks, update tests in `preflight_test.go` and mention new requirements here or in [docs/TROUBLESHOOTING.md](../docs/TROUBLESHOOTING.md).

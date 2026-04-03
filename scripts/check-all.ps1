@@ -170,6 +170,7 @@ Write-Host "=======================" -ForegroundColor Yellow
 Write-Host "Checking Docker configuration..." -ForegroundColor Cyan
 $dockerFiles = @(
     "infrastructure/Dockerfile.controller.optimized",
+    "infrastructure/compose/docker-compose.yml",
     "infrastructure/docker-compose.dev.yml"
 )
 

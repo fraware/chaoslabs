@@ -17,10 +17,25 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
       containers:
       - name: chaos-controller
         image: chaos-controller:latest
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "1"
+            memory: "512Mi"
         ports:
         - containerPort: 8080
         env:
@@ -28,3 +43,7 @@ spec:
           # In a multi-cluster scenario, these endpoints point to agents running in different clusters.
           - name: AGENT_ENDPOINTS
             value: "http://chaos-agent.chaoslab.svc.cluster.local:9090/inject, http://agent-secondary.cluster.local:9090/inject"
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://otel-collector.observability.svc.cluster.local:4318"
+          - name: OTEL_EXPORTER_OTLP_INSECURE
+            value: "true"

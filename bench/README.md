@@ -13,7 +13,7 @@ The benchmarking framework measures:
 ## Prerequisites
 
 ### Required Tools
-- Go 1.21+
+- Go 1.23+ (see repo `go.work` and module `toolchain` directives)
 - `go-torch` for flamegraph generation (optional, falls back to pprof)
 - `stress-ng` for system stress testing
 - `tc` (traffic control) for network fault injection
@@ -36,21 +36,21 @@ brew install stress-ng
 
 ## Quick Start
 
-### 1. Start Services
+### 1. Start services
 ```bash
 # Start controller, agent, and dashboard
-docker-compose up -d
+docker compose up -d
 
-# Or run individually
-cd controller && go run main.go &
-cd agent && go run main.go &
-cd Dashboard && python app.py &
+# Or run individually (from repo root)
+cd controller && go run . &
+cd agent && go run . &
+cd dashboard-v2 && npm install && npm run dev &
 ```
 
-### 2. Run Basic Benchmark
+### 2. Run a benchmark
 ```bash
 cd bench
-go run benchmark.go
+go run .
 ```
 
 ### 3. Generate Flamegraphs

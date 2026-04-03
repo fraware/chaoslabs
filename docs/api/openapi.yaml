@@ -1,0 +1,125 @@
+openapi: 3.0.3
+info:
+  title: ChaosLabs Controller API
+  version: 1.0.0
+  description: |
+    HTTP API for orchestrating chaos experiments. Handlers live in `controller/handlers.go`;
+    this document is the contract clients should target.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+paths:
+  /start:
+    post:
+      summary: Start an experiment
+      operationId: startExperiment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentRequest"
+      responses:
+        "200":
+          description: Experiment accepted or started
+        "400":
+          description: Validation or JSON error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "405":
+          description: Method not allowed
+  /stop:
+    post:
+      summary: Stop an experiment
+      operationId: stopExperiment
+      responses:
+        "200":
+          description: Stop acknowledged
+        "405":
+          description: Method not allowed
+  /experiments:
+    get:
+      summary: List experiments
+      operationId: listExperiments
+      responses:
+        "200":
+          description: Experiment list
+        "405":
+          description: Method not allowed
+  /healthz:
+    get:
+      summary: Liveness
+      operationId: healthz
+      responses:
+        "200":
+          description: Healthy
+        "503":
+          description: Unhealthy
+  /readyz:
+    get:
+      summary: Readiness
+      operationId: readyz
+      responses:
+        "200":
+          description: Ready
+        "503":
+          description: Not ready
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      operationId: metrics
+      responses:
+        "200":
+          description: Prometheus text exposition format
+components:
+  schemas:
+    ExperimentRequest:
+      type: object
+      required: [name, experiment_type, target, duration]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        experiment_type:
+          type: string
+          description: e.g. cpu-stress, network-latency, network-loss, mem-stress, process-kill
+        target:
+          type: string
+        duration:
+          type: integer
+          minimum: 1
+          maximum: 3600
+        delay_ms:
+          type: integer
+        loss_percent:
+          type: integer
+        cpu_workers:
+          type: integer
+        mem_size_mb:
+          type: integer
+        kill_process:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        parallel:
+          type: boolean
+        agent_count:
+          type: integer
+          minimum: 1
+          maximum: 100
+    ErrorBody:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: string

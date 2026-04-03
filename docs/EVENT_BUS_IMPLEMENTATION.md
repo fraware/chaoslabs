@@ -1,6 +1,8 @@
 # Event Bus Implementation
 
-This document describes the comprehensive event bus implementation for ChaosLabs using NATS JetStream, providing decoupled writes, real-time notifications, and event replay capabilities.
+This document describes the event bus implementation for ChaosLabs using NATS JetStream: decoupled writes, notifications, and replay-related services in the controller.
+
+**Observability:** Application traces use **OpenTelemetry OTLP/HTTP** (`OTEL_EXPORTER_OTLP_ENDPOINT`), not the deprecated Jaeger HTTP collector API. Metrics remain on Prometheus as elsewhere in the repo.
 
 ## Architecture Overview
 

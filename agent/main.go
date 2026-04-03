@@ -2,45 +2,33 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/jaeger"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func main() {
-	// Initialize distributed tracing.
-	tp, err := initTracer()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+
+	ctx := context.Background()
+	tp, err := newOTLPTracerProvider(ctx, "chaoslabs-agent", "1.0.0")
 	if err != nil {
-		log.Fatalf("failed to initialize tracer: %v", err)
+		slog.Error("failed to initialize tracer", "err", err)
+		os.Exit(1)
 	}
 	defer func() { _ = tp.Shutdown(context.Background()) }()
+	otel.SetTracerProvider(tp)
 
 	registerAgentHandlers()
 
-	// Expose Prometheus metrics endpoint.
 	http.Handle("/metrics", promhttp.Handler())
 
-	log.Println("ChaosLab Agent running on :9090")
+	slog.Info("ChaosLab Agent listening", "addr", ":9090")
 	if err := http.ListenAndServe(":9090", nil); err != nil {
-		log.Fatalf("Agent failed to start: %v", err)
+		slog.Error("agent failed", "err", err)
+		os.Exit(1)
 	}
-}
-
-func initTracer() (*sdktrace.TracerProvider, error) {
-	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(
-		jaeger.WithEndpoint("http://jaeger-collector:14268/api/traces"),
-	))
-	if err != nil {
-		return nil, err
-	}
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exp),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-	)
-	otel.SetTracerProvider(tp)
-	return tp, nil
 }

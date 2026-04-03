@@ -1,0 +1,49 @@
+# Minimal local stack: controller, agent, dashboard (production-style images).
+# Run from repo root: docker compose -f infrastructure/compose/docker-compose.yml up --build
+# Or use the root docker-compose.yml wrapper (includes this file).
+version: "3.8"
+
+services:
+  controller:
+    image: chaoslabs/chaos-controller:latest
+    build:
+      context: ../..
+      dockerfile: infrastructure/Dockerfile.controller.optimized
+      target: production
+    ports:
+      - "8080:8080"
+    depends_on:
+      - agent
+    restart: unless-stopped
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4318}
+      - OTEL_EXPORTER_OTLP_INSECURE=${OTEL_EXPORTER_OTLP_INSECURE:-true}
+
+  agent:
+    image: chaoslabs/chaos-agent:latest
+    build:
+      context: ../..
+      dockerfile: infrastructure/Dockerfile.agent.optimized
+      target: runtime
+    ports:
+      - "9090:9090"
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    restart: unless-stopped
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4318}
+      - OTEL_EXPORTER_OTLP_INSECURE=${OTEL_EXPORTER_OTLP_INSECURE:-true}
+
+  dashboard:
+    image: chaoslabs/chaos-dashboard:latest
+    build:
+      context: ../..
+      dockerfile: infrastructure/Dockerfile.dashboard.optimized
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=http://localhost:8080
+    restart: unless-stopped

@@ -1,5 +1,7 @@
 # Kubernetes Deployment Guide for ChaosLabs
 
+See also the [documentation index](README.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+
 This document outlines the steps required to deploy ChaosLabs on a Kubernetes cluster. It covers setting up namespaces, deploying the controller, agent, and dashboard components, as well as verifying and troubleshooting your deployment.
 
 ---
@@ -27,7 +29,7 @@ This document outlines the steps required to deploy ChaosLabs on a Kubernetes cl
 - A working Kubernetes cluster (local or cloud-based, e.g., Minikube, Docker Desktop Kubernetes, GKE, EKS, etc.)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) installed and configured for your cluster.
 - Access to your container images. Ensure that your images (for the controller, agent, and dashboard) are pushed to a registry accessible by your cluster.
-- (Optional) Prometheus, Grafana, and Jaeger installed for observability and distributed tracing.
+- (Optional) Prometheus, Grafana, and an **OTLP**-compatible collector or tracing backend (OpenTelemetry Collector, Jaeger v2, Tempo, etc.).
 
 ---
 
@@ -36,12 +38,12 @@ This document outlines the steps required to deploy ChaosLabs on a Kubernetes cl
 **Controller:**
 - Receives experiment requests via HTTP endpoints.
 - Schedules experiments (immediately or at a future time) and dispatches them to one or more agents.
-- Exposes custom Prometheus metrics (e.g., experiment counts, durations) and distributed tracing via OpenTelemetry/Jaeger.
+- Exposes Prometheus metrics and OpenTelemetry traces via **OTLP/HTTP** (`OTEL_EXPORTER_OTLP_ENDPOINT` on the Deployment).
 
 **Agent:**
 - Listens for fault injection commands on its `/inject` endpoint.
 - Implements various fault injection techniques (network latency/loss via `tc`, CPU/memory stress using `stress-ng`, process kill).
-- Exposes Prometheus metrics and distributed tracing data.
+- Exposes Prometheus metrics and OTLP traces (same env vars as the controller).
 
 **Dashboard:**
 - Provides a web interface for monitoring experiments in real time.
@@ -141,8 +143,8 @@ For more detailed troubleshooting, refer to the TROUBLESHOOTING.md document.
 ## Observability & Scaling
 - **Prometheus & Grafana:**
 With the annotations in place, Prometheus should automatically scrape metrics from the controller and agent. Grafana dashboards (provided in the repository) can be imported to visualize these metrics.
-- **Distributed Tracing:**
-Both components are instrumented with OpenTelemetry and configured to send traces to Jaeger. Ensure your Jaeger collector endpoint is accessible.
+- **Distributed tracing:**
+Both components export traces with **OTLP/HTTP**. Point `OTEL_EXPORTER_OTLP_ENDPOINT` at your OpenTelemetry Collector or compatible backend (see sample env in `infrastructure/k8s/*-deployment.yaml`).
 - **Scaling:**
 The Horizontal Pod Autoscaler for the agent will help you test scalability under load. Monitor scaling behavior using:
 ```bash
@@ -159,6 +161,6 @@ kubectl delete namespace chaoslab
 - [Kubernetes Official Documentation](https://kubernetes.io/docs/home/)
 - [Prometheus Documentation](https://prometheus.io/docs/introduction/overview/)
 - [Grafana Documentation](https://grafana.com/docs/)
-- [Jaeger Documentation](https://www.jaegertracing.io/docs/1.18/)
+- [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/)
 
-For any additional questions or issues, please open an issue on our GitHub Issues page.
+For questions or issues, open a ticket on [github.com/fraware/chaoslabs/issues](https://github.com/fraware/chaoslabs/issues).

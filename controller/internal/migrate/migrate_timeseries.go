@@ -1,4 +1,4 @@
-package main
+package migrate
 
 import (
 	"context"
@@ -63,19 +63,16 @@ func NewTimeSeriesMigrator(mongoURI, databaseName string) (*TimeSeriesMigrator, 
 func (m *TimeSeriesMigrator) MigrateCollection(collectionName string) error {
 	log.Printf("Starting migration of collection: %s", collectionName)
 
-	// Get before stats
 	beforeStats, err := m.getCollectionStats(collectionName)
 	if err != nil {
 		return fmt.Errorf("failed to get before stats: %s", err)
 	}
 
-	// Create time-series collection
 	timeSeriesName := collectionName + "_ts"
 	if err := m.createTimeSeriesCollection(timeSeriesName); err != nil {
 		return fmt.Errorf("failed to create time-series collection: %w", err)
 	}
 
-	// Migrate data
 	startTime := time.Now()
 	recordsMigrated, err := m.migrateData(collectionName, timeSeriesName)
 	if err != nil {
@@ -83,17 +80,14 @@ func (m *TimeSeriesMigrator) MigrateCollection(collectionName string) error {
 	}
 	migrationDuration := time.Since(startTime)
 
-	// Get after stats
 	afterStats, err := m.getCollectionStats(timeSeriesName)
 	if err != nil {
 		return fmt.Errorf("failed to get after stats: %w", err)
 	}
 
-	// Calculate performance metrics
 	performanceGain := m.calculatePerformanceGain(beforeStats, afterStats)
 	diskUsageReduction := m.calculateDiskUsageReduction(beforeStats, afterStats)
 
-	// Store result
 	result := MigrationResult{
 		CollectionName:     collectionName,
 		RecordsMigrated:    recordsMigrated,
@@ -109,7 +103,6 @@ func (m *TimeSeriesMigrator) MigrateCollection(collectionName string) error {
 	return nil
 }
 
-// createTimeSeriesCollection creates a new time-series collection
 func (m *TimeSeriesMigrator) createTimeSeriesCollection(name string) error {
 	opts := options.CreateCollection().SetTimeSeriesOptions(
 		options.TimeSeries().SetTimeField("timestamp").SetMetaField("agentId"),
@@ -118,12 +111,10 @@ func (m *TimeSeriesMigrator) createTimeSeriesCollection(name string) error {
 	return m.database.CreateCollection(context.Background(), name, opts)
 }
 
-// migrateData migrates data from regular to time-series collection
 func (m *TimeSeriesMigrator) migrateData(sourceName, targetName string) (int64, error) {
 	sourceCollection := m.database.Collection(sourceName)
 	targetCollection := m.database.Collection(targetName)
 
-	// Get all documents from source
 	cursor, err := sourceCollection.Find(context.Background(), bson.M{})
 	if err != nil {
 		return 0, fmt.Errorf("failed to query source collection: %w", err)
@@ -135,14 +126,12 @@ func (m *TimeSeriesMigrator) migrateData(sourceName, targetName string) (int64, 
 		return 0, fmt.Errorf("failed to decode documents: %w", err)
 	}
 
-	// Transform documents for time-series format
 	var transformedDocs []interface{}
 	for _, doc := range documents {
 		transformed := m.transformDocument(doc)
 		transformedDocs = append(transformedDocs, transformed)
 	}
 
-	// Insert into target collection
 	if len(transformedDocs) > 0 {
 		_, err = targetCollection.InsertMany(context.Background(), transformedDocs)
 		if err != nil {
@@ -153,11 +142,9 @@ func (m *TimeSeriesMigrator) migrateData(sourceName, targetName string) (int64, 
 	return int64(len(transformedDocs)), nil
 }
 
-// transformDocument transforms a regular document to time-series format
 func (m *TimeSeriesMigrator) transformDocument(doc bson.M) bson.M {
 	transformed := bson.M{}
 
-	// Ensure timestamp field exists
 	if timestamp, exists := doc["timestamp"]; exists {
 		transformed["timestamp"] = timestamp
 	} else if createdAt, exists := doc["createdAt"]; exists {
@@ -168,7 +155,6 @@ func (m *TimeSeriesMigrator) transformDocument(doc bson.M) bson.M {
 		transformed["timestamp"] = time.Now()
 	}
 
-	// Ensure agentId field exists
 	if agentId, exists := doc["agentId"]; exists {
 		transformed["agentId"] = agentId
 	} else if agent, exists := doc["agent"]; exists {
@@ -177,31 +163,26 @@ func (m *TimeSeriesMigrator) transformDocument(doc bson.M) bson.M {
 		transformed["agentId"] = "unknown"
 	}
 
-	// Copy other fields
 	for key, value := range doc {
-		if key != "_id" { // Skip MongoDB ObjectID
+		if key != "_id" {
 			transformed[key] = value
 		}
 	}
 
-	// Add TTL field
-	transformed["expireAt"] = time.Now().Add(7 * 24 * time.Hour) // 1 week default
+	transformed["expireAt"] = time.Now().Add(7 * 24 * time.Hour)
 
 	return transformed
 }
 
-// getCollectionStats retrieves performance statistics for a collection
 func (m *TimeSeriesMigrator) getCollectionStats(collectionName string) (CollectionStats, error) {
 	collection := m.database.Collection(collectionName)
 
-	// Get collection stats
-	statsCmd := bson.D{{"collStats", collectionName}}
+	statsCmd := bson.D{{Key: "collStats", Value: collectionName}}
 	var result bson.M
 	if err := m.database.RunCommand(context.Background(), statsCmd).Decode(&result); err != nil {
 		return CollectionStats{}, fmt.Errorf("failed to get collection stats: %w", err)
 	}
 
-	// Extract stats
 	stats := CollectionStats{
 		Count:       result["count"].(int64),
 		Size:        result["size"].(int64),
@@ -215,7 +196,6 @@ func (m *TimeSeriesMigrator) getCollectionStats(collectionName string) (Collecti
 		}
 	}
 
-	// Measure query performance
 	queryTime, err := m.measureQueryPerformance(collection)
 	if err != nil {
 		log.Printf("Warning: failed to measure query performance: %v", err)
@@ -226,12 +206,10 @@ func (m *TimeSeriesMigrator) getCollectionStats(collectionName string) (Collecti
 	return stats, nil
 }
 
-// measureQueryPerformance measures the time to execute a sample query
 func (m *TimeSeriesMigrator) measureQueryPerformance(collection *mongo.Collection) (time.Duration, error) {
-	// Sample query: find recent documents
 	filter := bson.M{
 		"timestamp": bson.M{
-			"$gte": time.Now().Add(-24 * time.Hour), // Last 24 hours
+			"$gte": time.Now().Add(-24 * time.Hour),
 		},
 	}
 
@@ -242,7 +220,6 @@ func (m *TimeSeriesMigrator) measureQueryPerformance(collection *mongo.Collectio
 	}
 	defer cursor.Close(context.Background())
 
-	// Consume cursor to measure actual query time
 	var results []bson.M
 	if err := cursor.All(context.Background(), &results); err != nil {
 		return 0, err
@@ -251,7 +228,6 @@ func (m *TimeSeriesMigrator) measureQueryPerformance(collection *mongo.Collectio
 	return time.Since(start), nil
 }
 
-// calculatePerformanceGain calculates the performance improvement
 func (m *TimeSeriesMigrator) calculatePerformanceGain(before, after CollectionStats) float64 {
 	if before.QueryTime == 0 {
 		return 0
@@ -259,7 +235,6 @@ func (m *TimeSeriesMigrator) calculatePerformanceGain(before, after CollectionSt
 	return float64(before.QueryTime-after.QueryTime) / float64(before.QueryTime) * 100
 }
 
-// calculateDiskUsageReduction calculates the disk usage reduction
 func (m *TimeSeriesMigrator) calculateDiskUsageReduction(before, after CollectionStats) float64 {
 	if before.StorageSize == 0 {
 		return 0
@@ -271,25 +246,21 @@ func (m *TimeSeriesMigrator) calculateDiskUsageReduction(before, after Collectio
 func (m *TimeSeriesMigrator) RunBenchmarks() error {
 	log.Println("Running performance benchmarks...")
 
-	// Run benchmarks on original collections
 	beforeResults, err := m.runQueryBenchmarks()
 	if err != nil {
 		return fmt.Errorf("failed to run before benchmarks: %w", err)
 	}
 
-	// Run benchmarks on time-series collections
 	afterResults, err := m.runTimeSeriesBenchmarks()
 	if err != nil {
 		return fmt.Errorf("failed to run after benchmarks: %w", err)
 	}
 
-	// Compare results
 	m.compareBenchmarkResults(beforeResults, afterResults)
 
 	return nil
 }
 
-// runQueryBenchmarks runs benchmarks on regular collections
 func (m *TimeSeriesMigrator) runQueryBenchmarks() (map[string]QueryBenchmark, error) {
 	results := make(map[string]QueryBenchmark)
 
@@ -297,14 +268,12 @@ func (m *TimeSeriesMigrator) runQueryBenchmarks() (map[string]QueryBenchmark, er
 	for _, name := range collections {
 		collection := m.database.Collection(name)
 
-		// Time-range query benchmark
 		timeRangeDuration, err := m.benchmarkTimeRangeQuery(collection)
 		if err != nil {
 			log.Printf("Warning: failed to benchmark time-range query for %s: %v", name, err)
 			continue
 		}
 
-		// Aggregation benchmark
 		aggregationDuration, err := m.benchmarkAggregationQuery(collection)
 		if err != nil {
 			log.Printf("Warning: failed to benchmark aggregation query for %s: %v", name, err)
@@ -312,8 +281,8 @@ func (m *TimeSeriesMigrator) runQueryBenchmarks() (map[string]QueryBenchmark, er
 		}
 
 		results[name] = QueryBenchmark{
-			CollectionName:   name,
-			TimeRangeQuery:   timeRangeDuration,
+			CollectionName:     name,
+			TimeRangeQuery:     timeRangeDuration,
 			AggregationQuery: aggregationDuration,
 		}
 	}
@@ -321,7 +290,6 @@ func (m *TimeSeriesMigrator) runQueryBenchmarks() (map[string]QueryBenchmark, er
 	return results, nil
 }
 
-// runTimeSeriesBenchmarks runs benchmarks on time-series collections
 func (m *TimeSeriesMigrator) runTimeSeriesBenchmarks() (map[string]QueryBenchmark, error) {
 	results := make(map[string]QueryBenchmark)
 
@@ -329,14 +297,12 @@ func (m *TimeSeriesMigrator) runTimeSeriesBenchmarks() (map[string]QueryBenchmar
 	for _, name := range collections {
 		collection := m.database.Collection(name)
 
-		// Time-range query benchmark
 		timeRangeDuration, err := m.benchmarkTimeRangeQuery(collection)
 		if err != nil {
 			log.Printf("Warning: failed to benchmark time-range query for %s: %v", name, err)
 			continue
 		}
 
-		// Aggregation benchmark
 		aggregationDuration, err := m.benchmarkAggregationQuery(collection)
 		if err != nil {
 			log.Printf("Warning: failed to benchmark aggregation query for %s: %v", name, err)
@@ -344,8 +310,8 @@ func (m *TimeSeriesMigrator) runTimeSeriesBenchmarks() (map[string]QueryBenchmar
 		}
 
 		results[name] = QueryBenchmark{
-			CollectionName:   name,
-			TimeRangeQuery:   timeRangeDuration,
+			CollectionName:     name,
+			TimeRangeQuery:     timeRangeDuration,
 			AggregationQuery: aggregationDuration,
 		}
 	}
@@ -360,7 +326,6 @@ type QueryBenchmark struct {
 	AggregationQuery time.Duration `json:"aggregationQuery"`
 }
 
-// benchmarkTimeRangeQuery benchmarks a time-range query
 func (m *TimeSeriesMigrator) benchmarkTimeRangeQuery(collection *mongo.Collection) (time.Duration, error) {
 	filter := bson.M{
 		"timestamp": bson.M{
@@ -376,7 +341,6 @@ func (m *TimeSeriesMigrator) benchmarkTimeRangeQuery(collection *mongo.Collectio
 	}
 	defer cursor.Close(context.Background())
 
-	// Consume cursor
 	var results []bson.M
 	if err := cursor.All(context.Background(), &results); err != nil {
 		return 0, err
@@ -385,15 +349,14 @@ func (m *TimeSeriesMigrator) benchmarkTimeRangeQuery(collection *mongo.Collectio
 	return time.Since(start), nil
 }
 
-// benchmarkAggregationQuery benchmarks an aggregation query
 func (m *TimeSeriesMigrator) benchmarkAggregationQuery(collection *mongo.Collection) (time.Duration, error) {
 	pipeline := mongo.Pipeline{
-		{{"$match", bson.M{
+		{{Key: "$match", Value: bson.M{
 			"timestamp": bson.M{
 				"$gte": time.Now().Add(-24 * time.Hour),
 			},
 		}}},
-		{{"$group", bson.M{
+		{{Key: "$group", Value: bson.M{
 			"_id":   "$agentId",
 			"count": bson.M{"$sum": 1},
 		}}},
@@ -406,7 +369,6 @@ func (m *TimeSeriesMigrator) benchmarkAggregationQuery(collection *mongo.Collect
 	}
 	defer cursor.Close(context.Background())
 
-	// Consume cursor
 	var results []bson.M
 	if err := cursor.All(context.Background(), &results); err != nil {
 		return 0, err
@@ -415,7 +377,6 @@ func (m *TimeSeriesMigrator) benchmarkAggregationQuery(collection *mongo.Collect
 	return time.Since(start), nil
 }
 
-// compareBenchmarkResults compares before and after benchmark results
 func (m *TimeSeriesMigrator) compareBenchmarkResults(before, after map[string]QueryBenchmark) {
 	log.Println("\n=== Benchmark Comparison Results ===")
 
@@ -423,14 +384,12 @@ func (m *TimeSeriesMigrator) compareBenchmarkResults(before, after map[string]Qu
 		if afterBench, exists := after[collectionName+"_ts"]; exists {
 			log.Printf("\nCollection: %s", collectionName)
 
-			// Time-range query improvement
 			if beforeBench.TimeRangeQuery > 0 {
 				improvement := float64(beforeBench.TimeRangeQuery-afterBench.TimeRangeQuery) / float64(beforeBench.TimeRangeQuery) * 100
 				log.Printf("  Time-range query: %v → %v (%.1f%% improvement)",
 					beforeBench.TimeRangeQuery, afterBench.TimeRangeQuery, improvement)
 			}
 
-			// Aggregation query improvement
 			if beforeBench.AggregationQuery > 0 {
 				improvement := float64(beforeBench.AggregationQuery-afterBench.AggregationQuery) / float64(beforeBench.AggregationQuery) * 100
 				log.Printf("  Aggregation query: %v → %v (%.1f%% improvement)",
@@ -452,14 +411,13 @@ func (m *TimeSeriesMigrator) GenerateReport() error {
 		Summary:          m.calculateSummary(),
 	}
 
-	// Save report to file
 	filename := fmt.Sprintf("migration_report_%s.json", time.Now().Format("20060102_150405"))
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal report: %w", err)
 	}
 
-	if err := os.WriteFile(filename, data, 0644); err != nil {
+	if err := os.WriteFile(filename, data, 0600); err != nil {
 		return fmt.Errorf("failed to write report: %w", err)
 	}
 
@@ -467,7 +425,6 @@ func (m *TimeSeriesMigrator) GenerateReport() error {
 	return nil
 }
 
-// calculateSummary calculates summary statistics
 func (m *TimeSeriesMigrator) calculateSummary() map[string]interface{} {
 	totalRecords := int64(0)
 	totalDuration := time.Duration(0)

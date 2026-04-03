@@ -138,7 +138,7 @@ func TestDiffEmitEngine_IgnoreFields(t *testing.T) {
 		"updated_at": "2023-01-01T00:00:00Z",
 	}
 
-	result1, err := engine.ComputeDiff("ignore-test", data1)
+	_, err := engine.ComputeDiff("ignore-test", data1)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
