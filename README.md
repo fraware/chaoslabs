@@ -9,7 +9,7 @@
 **ChaosLabs** is an open-source chaos engineering toolkit for distributed systems. Run controlled fault injection—network impairment, CPU and memory stress, process kills—and coordinate experiments across agents from a single controller, with a live dashboard and first-class observability hooks.
 
 <p align="center">
-  <img src="docs/assets/logo.png" alt="ChaosLabs logo" width="400" />
+  <img src="docs/assets/logo.png" alt="ChaosLabs logo" width="600" />
 </p>
 
 ---
