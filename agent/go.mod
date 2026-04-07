@@ -1,8 +1,6 @@
 module github.com/fraware/chaoslabs/agent
 
-go 1.23.0
-
-toolchain go1.24.0
+go 1.25.0
 
 require (
 	github.com/prometheus/client_golang v1.23.0
@@ -12,7 +10,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.37.0
 	go.opentelemetry.io/otel/sdk v1.37.0
 	go.opentelemetry.io/otel/trace v1.37.0
-	golang.org/x/sys v0.34.0
+	golang.org/x/sys v0.42.0
 )
 
 require (
