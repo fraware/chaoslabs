@@ -2,7 +2,7 @@
 # This Dockerfile implements best practices for build speed, security, and size optimization
 
 # Build cache stage - reused across builds for faster iterations
-FROM golang:1.24-alpine AS build-cache
+FROM golang:1.26-alpine AS build-cache
 WORKDIR /build-cache
 # Install build dependencies and cache them
 RUN apk add --no-cache git ca-certificates tzdata make
@@ -53,7 +53,7 @@ EXPOSE 9090
 ENTRYPOINT ["./agent"]
 
 # Debug variant - includes delve debugger
-FROM golang:1.24-alpine AS debug
+FROM golang:1.26-alpine AS debug
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
 WORKDIR /app
 COPY --from=development /app .

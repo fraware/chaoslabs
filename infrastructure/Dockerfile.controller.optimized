@@ -1,5 +1,5 @@
 # Build the controller from the standalone controller module (repo root has go.work only).
-FROM golang:1.24-alpine AS build-cache
+FROM golang:1.26-alpine AS build-cache
 WORKDIR /src/controller
 RUN apk add --no-cache git ca-certificates tzdata
 COPY controller/go.mod controller/go.sum ./
