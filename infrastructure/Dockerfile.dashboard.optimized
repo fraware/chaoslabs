@@ -35,7 +35,7 @@ COPY dashboard-v2/ .
 RUN npm run build
 
 # Final stage - minimal runtime image with nginx
-FROM nginx:1.25-alpine AS runtime
+FROM nginx:1.29.8-alpine AS runtime
 # Install security updates
 RUN apk --no-cache upgrade
 
