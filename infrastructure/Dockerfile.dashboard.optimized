@@ -2,7 +2,7 @@
 # This Dockerfile implements best practices for build speed, security, and size optimization
 
 # Base Node.js image for building
-FROM node:20-alpine AS build-cache
+FROM node:26-alpine AS build-cache
 WORKDIR /build-cache
 # Install build dependencies
 RUN apk add --no-cache git
@@ -11,7 +11,7 @@ COPY dashboard-v2/package*.json ./
 RUN npm install --omit=dev
 
 # Development build stage
-FROM node:20-alpine AS development
+FROM node:26-alpine AS development
 WORKDIR /app
 # Copy package files
 COPY dashboard-v2/package*.json ./
@@ -23,7 +23,7 @@ COPY dashboard-v2/ .
 RUN npm run build
 
 # Production build stage - optimized build
-FROM node:20-alpine AS production
+FROM node:26-alpine AS production
 WORKDIR /app
 # Copy package files
 COPY dashboard-v2/package*.json ./
